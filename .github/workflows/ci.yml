@@ -2,7 +2,7 @@ name: core-ci
 
 on:
   push:
-    branches: [sim-core]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

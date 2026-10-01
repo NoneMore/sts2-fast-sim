@@ -1,21 +1,7 @@
-//! 进阶数值表 —— **生成产物，别手改**。
+//! Ascension scaling tables.
 //!
-//! 重新生成：
-//! ```text
-//! & "D:\game mod\sts2core\.venv\Scripts\python.exe" tools/dump_ascension.py
-//! ```
-//!
-//! 来源和口径写在 `tools/dump_ascension.py` 的文件头。三条要点：
-//!
-//! * **`[源码]` 档，验不了。** 全部实录都是 A1/A2，A8 以上没有任何观测。
-//!   对应的安全性质是 [`adjust`] 在 `asc < 8` 时提前 return ——
-//!   既有对拍逐字节不变，`ascension_below_8_is_a_no_op` 守着。
-//! * **`def` / `mv` 是下标，`name` / `mv_name` 是它的校验位。**
-//!   有人往 `ENEMIES` 中间插一条，下标就全歪了，而歪掉不会报错 ——
-//!   `asc_table_indices_still_point_at_the_named_enemy` 守着。
-//! * **对不上的没进表。** 生成器按 (种类, 低进阶值) 去认内核的 op，
-//!   候选个数和 [源码] 的用点数对不上就整条跳过并报出来。
-//!   欠的那些在 `data/ascension.json` 里逐条写着卡在哪。
+//! This file is a checked-in static snapshot consumed by the simulation core.
+//! Regeneration and source validation are intentionally external to this crate.
 
 use crate::ops::EOp;
 
@@ -391,7 +377,7 @@ pub static ASC_OPS: &[AscOp] = &[
 /// 这一招的这个 op，在进阶 `asc` 下是什么样。
 ///
 /// **这是内核里唯一一处把进阶算进 `EOp` 的地方。** 读 `EnemyMove::ops` 的
-/// 八个地方（执行、两个威胁预测、planner、`move_signature`、两个验收台）
+/// 八个地方（执行、两个威胁预测、规划层、`move_signature`、两个验证工具）
 /// 全部经由它 —— 漏掉一个的表现是那条路径**静默地**按低进阶算。
 ///
 /// `asc < 8` 时逐字返回原 op，一次表都不查。

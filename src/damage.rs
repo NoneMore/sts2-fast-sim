@@ -17,9 +17,7 @@
 //! **步骤 3.5-6 的乘区累乘，只在最后取整一次**（不是每步各取一次）。
 //! 见 `apply_modifiers` 的注释：怨恨那一帧证伪了逐步取整。
 //!
-//! NOTE: this is an empirical model. `tools/replay_check` (phase 2) diffs it
-//! against the real game and is the authority; do not "fix" numbers here by
-//! intuition without a replay that disagrees.
+//! The modifier order is part of the simulation contract; source validation lives outside this crate.
 
 use crate::state::{Entity, St};
 
@@ -44,7 +42,7 @@ pub fn tagged_attack_bonus(attacker: &Entity, strike: bool) -> i32 {
 /// 位置为什么在力量之前：[源码] `EnchantmentModel.EnchantDamageMultiplicative`
 /// 的文档写着 "This hook runs BEFORE all other damage modification hooks"，
 /// 而力量走的是普通的 `ModifyDamageAdditive`。腐化那一版本来就是这么建的
-/// （`docs/design-l1.md` 伤害管线的第 2 步），这里只是把它从一个 `bool` 推广成一对整数。
+/// （验证数据 伤害管线的第 2 步），这里只是把它从一个 `bool` 推广成一对整数。
 #[inline]
 pub fn card_face_damage(base: i32, mul: (i32, i32), bonus: i32, strength: i32, vigor: i32) -> i32 {
     let mut d = base;
@@ -58,7 +56,7 @@ pub fn card_face_damage(base: i32, mul: (i32, i32), bonus: i32, strength: i32, v
 ///
 /// **所有乘区累乘成一个有理数，最后只取整一次。**
 ///
-/// 这里原来是逐个乘区各自向下取整，`damage.rs` 和 `CLAUDE.md` 都写着
+/// 这里原来是逐个乘区各自向下取整，`damage.rs` 和 `规则说明` 都写着
 /// "每一步都向下取整，这很关键" —— **那句话是错的**。
 /// 2026-08-15 第1幕 Boss 那一帧把它证伪了：我带虚弱、神官带易伤，
 /// 怨恨（基础 5，攻击两次）实际打出 10：
@@ -79,7 +77,7 @@ pub fn apply_modifiers(face: i32, attacker: &Entity, defender: &Entity) -> i32 {
     // 意图标签是 `0×3`，即 `5 − 9 + 2 = −2` 先求和再夹 0。
     // 夹完再加会得到 2×3，和观测对不上。
     //
-    // **只有预测路径会走到这里。** 默认对拍和 L2 的 `Threat` 走
+    // **只有预测路径会走到这里。** 默认外部校验层和搜索层的 `Threat` 走
     // `injected_enemy_turn`，那条路拿观测到的意图标签**直接**扣血、不过本函数，
     // 而标签本来就含污染（实测：打出一张技能后标签当场 15 -> 17）。
     // 所以这一行不会造成重复计数 —— 这正是两条路径分开的价值，
@@ -100,7 +98,7 @@ pub fn apply_modifiers(face: i32, attacker: &Entity, defender: &Entity) -> i32 {
     //   打击带易伤 6→6  6×0.7×1.5=6.3→6  6×2/3×1.5=6.0→6  一样
     //   无 debuff 8→8  不带缩小                      不适用
     // **四个样本在两种倍率下取整后完全相同**，所以它们从来没有钉死 ×2/3 ——
-    // 那是当时从两个自洽解里挑的一个。这正是 `../CLAUDE.md` 第 2、4 条
+    // 那是当时从两个自洽解里挑的一个。这正是 规则说明 第 2、4 条
     //（"欠定就留空"/"和所有已知数据一致不等于对"）说的那个坑，
     // 而且和乘区取整那个 bug 是同一个形状：藏得住，因为样本分不开。
     //
@@ -110,7 +108,7 @@ pub fn apply_modifiers(face: i32, attacker: &Entity, defender: &Entity) -> i32 {
     //
     // **仍然没有一个实测样本能把 0.7 和 2/3 分开**，别把这行当成实测。
     // 要分开需要缩小状态下打一张**基础值 ≥ 10** 的攻击牌：
-    //   base 10  →  0.7 得 7，2/3 得 6      ← 差 1，对拍当场会判
+    //   base 10  →  0.7 得 7，2/3 得 6      ← 差 1，校验当场会判
     //   base 13  →  0.7 得 9，2/3 得 8
     // 现有牌组最大基础值是 9（剑柄打击/突破），9×0.7=6.3 和 9×2/3=6.0 都落到 6，
     // 所以这一局取不到判决样本。**下次在缩小状态下拿到大牌，第一时间打一张。**
@@ -132,7 +130,7 @@ pub fn apply_modifiers(face: i32, attacker: &Entity, defender: &Entity) -> i32 {
     // 标记怎么上、什么时候摘，见 `St::PenNibArmed`。
     //
     // **它是个乘区，不是"打完再翻倍"** —— 和别的乘区一起累乘、最后只取整一次。
-    // [实测] 2026-09-06 `act3_f46_elite_soul_nexus` 帧32：格挡 6 + 力量 1 = 7，
+    // [实测] 2026-09-06 `历史验证样本` 帧32：格挡 6 + 力量 1 = 7，
     // 带虚弱 ⇒ 7 × 3/4 × 2 = 10.5 -> **10**，游戏正是 10。
     // （这一帧两种写法都给 10：⌊7×0.75⌋×2 也是 10。**分不开，照源码写。**
     //   要分开需要一个 `base×0.75` 的小数部分 ≥ 0.5 的样本。）
@@ -215,7 +213,7 @@ pub fn apply_modifiers(face: i32, attacker: &Entity, defender: &Entity) -> i32 {
 
 /// **冻住的意图标签**在敌人真打下来那一刻还要补的乘区：**我的回合末才挂上的**那几个。
 ///
-/// 对拍和 L2 的 `Threat::set` 拿观测到的意图标签直接扣血（`injected_enemy_turn` 的
+/// 外部校验层和搜索层的 `Threat::set` 拿观测到的意图标签直接扣血（`injected_enemy_turn` 的
 /// `live == false`），标签是同步那一刻按当时的局面算好的。今天只有一个乘区在那之后才出现：
 /// **钻石头冠**（[源码] `DiamondDiadem.BeforeSideTurnEnd` 挂 `DiamondDiademPower`，
 /// 我出牌的时候它根本不在身上），所以标签里一定没有它。
@@ -334,7 +332,7 @@ pub fn card_block(base: i32, owner: &mut Entity) -> i32 {
     //   base 5 带脆弱1：先脆弱再翻倍 = floor(5×3/4)×2 = 6
     //                   先翻倍再脆弱 = floor(10×3/4) = 7
     //   选了给 6 的那个 —— 两条都说得通时取**不高估玩家**的那边。
-    //   将来带着脆弱打出第一张格挡牌，对拍会当场报出来。
+    //   将来带着脆弱打出第一张格挡牌，校验会当场报出来。
     if b > 0 && owner.get(St::VambraceCharge) > 0 {
         owner.add(St::VambraceCharge, -1);
         b *= 2;
@@ -371,7 +369,7 @@ pub fn card_block(base: i32, owner: &mut Entity) -> i32 {
     // **一处已知的简化**：源码那个 `e.CardPlay != cardPlay` 把**同一次出牌**
     // 产生的格挡排除在计数之外（一张牌给两段格挡时两段都翻倍），
     // 内核按调用次数数，第二段会被第一段挡住。目前没有这样的牌，
-    // 有了就会在对拍里当场露出来。
+    // 有了就会在校验里当场露出来。
     if b > 0 {
         if owner.get(St::UnmovableCharge) < owner.get(St::Unmovable) {
             b *= 2;

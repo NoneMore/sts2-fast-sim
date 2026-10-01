@@ -100,8 +100,8 @@ pub enum Op {
     ///
     /// 卡面写的是"在回合开始时，获得1能量"，但实测（2026-08-15 第1幕 Boss）
     /// 打出的瞬间显示就变成 `1/4` —— 上限当场从 3 变 4，当前能量只扣了牌费。
-    /// 按卡面建成 `TurnStart` 钩子会**重复计数**：`sync` 从观测拿到
-    /// `max_energy=4` 之后钩子再加 1，回合开始变成 5。对拍当场报出来了。
+    /// 按卡面建成 `TurnStart` 钩子会**重复计数**：`状态导入` 从观测拿到
+    /// `max_energy=4` 之后钩子再加 1，回合开始变成 5。校验当场报出来了。
     GainMaxEnergy(i32),
     /// 暴走「将这张牌在本场战斗中的伤害增加 n」——写回 `CardInst.bonus`，
     /// 所以是**这一张牌实例**变强，不是这个牌名变强。
@@ -193,8 +193,8 @@ pub enum Op {
     /// * 只动**手牌**，不动抽牌堆/弃牌堆
     ///
     /// **抽出来的具体费用是内核 RNG 的一个样本，不是预测**（不变量 4：
-    /// 内核的随机流故意和游戏不一致）。对拍时费用是软 diff，而且下一帧
-    /// `sync` 会拿观测到的真实费用盖回去 —— "观测到的费用是权威"那条规矩。
+    /// 内核的随机流故意和游戏不一致）。校验时费用是软 diff，而且下一帧
+    /// `状态导入` 会拿观测到的真实费用盖回去 —— "观测到的费用是权威"那条规矩。
     /// 求解器读到的是**分布正确的一次采样**，比"当作没变"诚实。
     RandomizeHandCosts { max: i32 },
     /// 手牌 + 弃牌堆全部并进抽牌堆，整体洗一次（瓶装潜能）。
@@ -495,7 +495,7 @@ pub enum Amt {
     /// **本场当前是第几个回合**（抱抱先生：伤害 = `TurnNumber`）。
     ///
     /// 为什么不用「层数 1 + 每次 `GrowSelf(1)`」那条现成的路（滚石就是那么写的）：
-    /// 那样相位靠**跨帧携带**，从战斗中途 `sync` 进来就会偏；而回合数是
+    /// 那样相位靠**跨帧携带**，从战斗中途 `状态导入` 进来就会偏；而回合数是
     /// `obs.round` 直接同步进来的观测量，永远对。
     /// 同样的坑摆动球踩过一次（`TurnsSeen` 跨战斗保留，假设从 0 开始会系统性错一个回合）。
     TurnNumber,
@@ -511,7 +511,7 @@ pub enum Amt {
     ///
     /// [源码] `PossessStrengthPower` 私下记着一张「从谁身上偷了多少」的字典，
     /// 自己死时逐条还回去。那张字典**观测里没有**（面板上 `POSSESS_STRENGTH_POWER`
-    /// 恒为 1），而 `sync` 每帧从观测重建、私有计数器带不过来 ——
+    /// 恒为 1），而 `状态导入` 每帧从观测重建、私有计数器带不过来 ——
     /// 所以退还量读的是**它自己的力量/敏捷**：那一手偷 2、自己加 2，两边逐次相等。
     ///
     /// 两者**只在两种情况下分岔**，方向相反：
@@ -640,7 +640,7 @@ pub enum TCond {
     ///
     /// **判倍数而不是判 ≥ n 再减回去**：面板计数器在触发后的那一秒显示 n 而不是 0
     /// （[源码] `DisplayAmount` 在 `IsActivating` 时返回 `Cards.IntValue`），
-    /// `sync` 恰好在那一秒读到的话灌进来的就是 n。取模的写法对这个值天然正确
+    /// `状态导入` 恰好在那一秒读到的话灌进来的就是 n。取模的写法对这个值天然正确
     /// （n+1 ≡ 1），「≥ n 就发作」会凭空多发一次。钢笔尖的 `% 10` 是同一个理由。
     CounterMultipleOf { st: St, n: i32 },
 }
@@ -680,7 +680,7 @@ pub enum TOp {
     /// 源码里它们不抽牌，改的是 `CombatManager` 那一次 `Draw(..., fromHandDraw: true)` 的张数。
     /// 内核照做：挂在 `Hook::TurnStart` 上**只记账**（加进 `St::HandDrawBonus`），
     /// `step::open_hand` 按 `step::hand_draw_count` 一次发完 —— 所以小提琴的抽牌锁不拦它，
-    /// planner 的机会节点也枚举得到这几张（2026-09-25 之前是在 `TurnStart` 上先抽，
+    /// 规划层的机会节点也枚举得到这几张（2026-09-25 之前是在 `TurnStart` 上先抽，
     /// 抽在机会节点之前）。
     /// 摆动球是 `AfterPlayerTurnStart` 里的真抽牌，留在 `OwnerDraw` —— 带着小提琴它就被拦掉。
     OwnerHandDraw(Amt),
@@ -1286,7 +1286,7 @@ pub struct PotionDef {
 // | 触发式 | 燃烧之血、奥利哈钢 | `POWERS`（本表只负责把 status 挂上）|
 // | 规则修饰 | 臂甲（首次卡牌格挡翻倍）| `step.rs` 的窄 `if` |
 // | 结构性 | 药水腰带（+2 药水栏位）| `State` 容量，不是 status |
-// | 局外 | 白银熔炉、佩尔之翼 | **不进 L1** —— 不属于战斗层 |
+// | 局外 | 白银熔炉、佩尔之翼 | **不进 core** —— 不属于战斗层 |
 
 /// 附魔的 `Amount` 怎么变成一个数值。**只有这三种形状**，别再加第四种没有
 /// 真实附魔在用的 —— 和「不许有空钩子」同一条规矩。
@@ -1333,7 +1333,7 @@ impl EnchVal {
 /// # `modelled: false` 不等于"没效果"
 ///
 /// 它等于"内核会**算错**这张牌，而且知道自己在算错"。`--live` 把它们列出来，
-/// 对拍不会静默放过。
+/// 校验不会静默放过。
 pub struct EnchantDef {
     /// 游戏 id（大写下划线），和观测里 `enchantment.id` 逐字对齐
     pub id: &'static str,
@@ -1368,12 +1368,12 @@ pub struct RelicDef {
     pub name: &'static str,
     /// 战斗开始时挂上的、**游戏也会报**的 status（金刚杵的力量、护喉甲的覆甲）。
     ///
-    /// **对拍路径上不许用它，也不需要用它** —— 观测里本来就有这些量。
+    /// **校验路径上不许用它，也不需要用它** —— 观测里本来就有这些量。
     /// 早先这一栏和 `private_status` 是同一个字段，一起进 `relic_carry`
     /// 每帧 `set` 回去；那样加一件金刚杵就会**把力量钉死在 1**，
     /// 药水/撕裂/内脏撕裂加的力量全部被覆盖掉。
     ///
-    /// 它的用处在**内核自己开一场仗**的时候（L3 的推演、合成 trace），
+    /// 它的用处在**内核自己开一场仗**的时候（评估层的推演、合成 验证样本），
     /// 那时没有观测可抄。`relic_start_status_is_observable` 守着"这一栏里的
     /// status 必须是观测能映射到的"。
     pub start_status: &'static [(St, i32)],
@@ -1381,7 +1381,7 @@ pub struct RelicDef {
     ///
     /// 和上面那栏的处置**正好相反**：必须由 `relic_carry` 逐帧带着走
     /// （游戏不报 ⇒ 每帧重新初始化的话，内核会以为臂甲每帧都还能翻倍），
-    /// 而且**不许出现在 `replay::ALL_ST`** —— 进去了对拍会每帧报一个
+    /// 而且**不许出现在 状态导入层** —— 进去了校验会每帧报一个
     /// 游戏里根本不存在的 status。两个测试各守一半。
     pub private_status: &'static [(St, i32)],
     /// 这件遗物**面板上那个计数器**该灌进哪个 status。
@@ -1391,7 +1391,7 @@ pub struct RelicDef {
     /// 错相位** —— 那是"自信地算错"，比不建模更糟。
     ///
     /// 好在游戏把它显示在遗物上（`ShowCounter` / `DisplayAmount`），
-    /// 录制器一直就把 `counter` 写进 trace 了。这里只是把它接上。
+    /// 录制器一直就把 `counter` 写进 验证样本 了。这里只是把它接上。
     pub counter_to: Option<St>,
     /// 战斗层的行为**是否已经建模到位**（局外遗物也算 true —— 它们不欠战斗层什么）
     pub modelled: bool,
@@ -1407,7 +1407,7 @@ pub struct RelicDef {
 ///
 /// | 差异 | 依据 |
 /// |---|---|
-/// | 格挡不过 `card_block`（不吃脆弱） | **实测**：`act1_f14` 帧4，带脆弱2 喝格挡药水仍得满 12 |
+/// | 格挡不过 `card_block`（不吃脆弱） | **实测**：`历史验证样本` 帧4，带脆弱2 喝格挡药水仍得满 12 |
 /// | 伤害不吃力量/腐化/锋利 | 推断（初代如此），**未实测** |
 /// | 给易伤**不触发** `ApplyVuln`（凶恶不抽牌） | **玩家判定**（2026-08-16）：卡面推不出来，问过 |
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1423,7 +1423,7 @@ pub enum Source {
 /// 以前这里有 6 瓶标着 `[推断]`，数值照初代记忆填 —— 而这个仓库已经被初代
 /// 记忆坑过一次（痛击基础值 + 5 张牌的 `ops_upg`）。现在有两个真来源：
 ///
-/// * **`traces/potions_catalog.json`**（`tools/dump_potions.py` 导的）——
+/// * **`traces/potions_catalog.json`**（验证数据 导的）——
 ///   id 来自 compendium 的 `potion_lab`，**文本来自游戏自己**
 ///   （`player.potions[].description` / `rewards.items[].potion_description`）。
 ///   **wiki 端点给不了药水**：它的 scope 写死是
@@ -1464,19 +1464,19 @@ pub enum Source {
 /// 内容表里没有的药水一律落到 `potion::UNKNOWN`：`legal_actions` 不生成它、
 /// 求解器也不假装它有效果。**拒绝比瞎猜好。**
 ///
-/// 想把一瓶从 `[源码]` 升成 `[实测]`：实战里喝一次，录进 trace，`verify` 会自动比。
-/// 喝药水那一帧现在**是参与对拍的**（2026-08-16 接上的）。
+/// 想把一瓶从 `[源码]` 升成 `[实测]`：实战里喝一次，录进 验证样本，`verify` 会自动比。
+/// 喝药水那一帧现在**是参与校验的**（2026-08-16 接上的）。
 pub const POTIONS: &[PotionDef] = &[
     // 0: 占位。`potion::NONE` = 空槽
     PotionDef { name: "无", targeted: false, ops: &[] },
-    // 1: [实测] 格挡药水 —— `act1_f14` 帧4：**带脆弱 2 时仍然给满 12**
+    // 1: [实测] 格挡药水 —— `历史验证样本` 帧4：**带脆弱 2 时仍然给满 12**
     //    （同局面下防御只给 3）。这是 `Source::Potion` 不走 `card_block` 的依据。
     PotionDef { name: "格挡药水", targeted: false, ops: &[Op::Block { base: 12 }] },
     // 2: [源码] 力量药水 +2（`StrengthPotion` = `PowerVar<StrengthPower>(2)`）。未实测
     PotionDef { name: "力量药水", targeted: false, ops: &[Op::Status { tgt: Tgt::Me, st: St::Strength, amt: 2 }] },
     // 3: [源码] 敏捷药水 +2（`DexterityPotion` = `PowerVar<DexterityPower>(2)`）。未实测
     PotionDef { name: "敏捷药水", targeted: false, ops: &[Op::Status { tgt: Tgt::Me, st: St::Dexterity, amt: 2 }] },
-    // 4: [实测] 能量药水 +2 —— `act1_f13` 帧0：能量 3/3 -> 5/3
+    // 4: [实测] 能量药水 +2 —— `历史验证样本` 帧0：能量 3/3 -> 5/3
     PotionDef { name: "能量药水", targeted: false, ops: &[Op::GainEnergy(2)] },
     // 5: [源码] 火焰药水 20 点（`FirePotion` = `DamageVar(20, Unpowered)`）。**未实测**。
     //    `Unpowered` 这个 prop 正好印证了第二条判定：它**不吃力量**
@@ -1493,7 +1493,7 @@ pub const POTIONS: &[PotionDef] = &[
     PotionDef { name: "虚弱药水", targeted: true, ops: &[Op::Status { tgt: Tgt::Enemy, st: St::Weak, amt: 3 }] },
     // 8: [游戏+源码] 迅捷药水 抽 3 张。游戏原文「抽3张牌。」，源码 `CardsVar(3)`
     PotionDef { name: "迅捷药水", targeted: false, ops: &[Op::Draw(3)] },
-    // 9: [实测] 再生药水 5 层 —— `act1_f17` 帧16：喝完 `REGEN_POWER=5`
+    // 9: [实测] 再生药水 5 层 —— `历史验证样本` 帧16：喝完 `REGEN_POWER=5`
     PotionDef { name: "再生药水", targeted: false, ops: &[Op::Status { tgt: Tgt::Me, st: St::Regen, amt: 5 }] },
     // ---- 2026-08-21 增量补的四瓶：**机制内核已经有的，一个新 Op 都没加** ----
     // 10: [游戏+源码] 爆炸安瓿 对**所有**敌人 10 点。源码 `TargetType.AllEnemies`
@@ -1516,7 +1516,7 @@ pub const POTIONS: &[PotionDef] = &[
     //     源码挂的是 `FlexPotionPower : TemporaryStrengthPower` —— **不是普通力量**，
     //     所以走 `St::TempStrength`（和预备打击同一条路，回合结束 `strip_temp_strength`
     //     减回去）。看成普通力量会让它跨回合，那是个凭空多出来的收益。
-    //     **也正因为它只管这一回合，它不是跨回合药水**，L2 该给它定价而不是拒绝评分。
+    //     **也正因为它只管这一回合，它不是跨回合药水**，搜索层 该给它定价而不是拒绝评分。
     //     **两条 op，不是一条**：`St::TempStrength` 只是记账用的标记，
     //     真正的力量是另一条 `St::Strength`（`strip_temp_strength` 回合末按标记减回去）。
     //     只写标记那一条的话，这瓶药水这回合给 0 力量、回合末还倒扣 5 —— 写错过一次。
@@ -1538,7 +1538,7 @@ pub const POTIONS: &[PotionDef] = &[
     //     近似的方向是**不给挑选收益 ⇒ 低估自己**，理由见 `Op::GenerateFree`。
     PotionDef { name: "攻击药水", targeted: false, ops: &[Op::GenerateFree(Kind::Attack)] },
     // 16: [源码] 技能药水 `SkillPotion` —— 同上，类型换成技能。
-    //     它就是 L2 验收里那个"跳过 1"的来源。**近似之后它不再被跳过**，
+    //     它就是 搜索层 外部验证里那个"跳过 1"的来源。**近似之后它不再被跳过**，
     //     但那意味着"按一个低估的版本参与比较"，不等于"验过了"。
     PotionDef { name: "技能药水", targeted: false, ops: &[Op::GenerateFree(Kind::Skill)] },
     // 17: [源码+实测] 欧洛巴斯之酸 `OrobicAcid` —— 攻击/技能/能力**各生成 1 张，
@@ -1612,7 +1612,7 @@ pub const POTIONS: &[PotionDef] = &[
 ///
 /// 做成一张可枚举的小表而不是给 `PotionDef` 加字段 —— 和 `RULE_MODIFIERS`
 /// 同一个理由：目前只有一条，而它需要被三个地方问到
-///（`legal_actions` 不许生成动作、L2 的定价不许给它标价、`--live` 要区别显示）。
+///（`legal_actions` 不许生成动作、搜索层的定价不许给它标价、`--live` 要区别显示）。
 /// 多起来的话该给它们一张带行为的表。
 pub static AUTOMATIC_POTIONS: &[u8] = &[crate::state::potion::FAIRY];
 

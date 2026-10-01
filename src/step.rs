@@ -57,7 +57,7 @@ pub fn effective_cost(s: &State, hand_ix: usize) -> i32 {
 /// 缠结给这张牌加多少费（[源码] `TangledPower.TryModifyEnergyCostInCombat`：带「缠身」的牌 +`Amount`，
 /// 而挂上那一刻全部攻击牌都带上了）。X 费牌 0 —— `GetWithModifiers` 对 `CostsX` 提前 return，钩子根本不跑。
 ///
-/// **两个客户共用这一份**：`effective_cost`（内核自己算费）和 `replay::sync`（mod 报的费用是
+/// **两个客户共用这一份**：`effective_cost`（内核自己算费）和 状态导入层（mod 报的费用是
 /// `GetAmountToSpend`，**已经含缠结**，要先扣掉再判「这张实例被永久改过费」—— 不扣的话
 /// 每张攻击牌记成 `cost_delta = +1`，内核再加一遍缠结，双算）。
 #[inline]
@@ -72,7 +72,7 @@ pub fn tangled_cost_addend(player: &Entity, id: u16) -> i32 {
 /// 这一刻**还能不能出牌**（轰鸣，[源码] `RingingPower.ShouldPlay`）。
 ///
 /// **必须是一个函数、两个客户共用**：`legal_actions`（求解器先问再走）和
-/// `rollout::fast_play_turn`（直接走）。抄两份的那一版当场被 rollout 的
+/// 推演层（直接走）。抄两份的那一版当场被 推演层的
 /// P3(a) 抓住 —— 6 次"走了 legal_actions 不认的动作"。那条判据存在的
 /// 全部理由就是这个，别把它变成两份实现。
 ///
@@ -83,7 +83,7 @@ pub fn cards_locked(s: &State) -> bool {
 }
 
 /// 「本回合最多出 N 张」打满了没有。懒惰和天鹅绒颈圈是**同一个形状**，
-/// `cards_locked`（`legal_actions` / rollout）和 `step` 的 `PlayCard` 共用这一份。
+/// `cards_locked`（`legal_actions` / 推演层）和 `step` 的 `PlayCard` 共用这一份。
 ///
 /// * 懒惰（知识恶魔的诅咒，[源码] `SlothPower.ShouldPlay => cardsPlayedThisTurn < Amount`）
 /// * 天鹅绒颈圈（[源码] `VelvetChoker.ShouldPlay => !(_cardsPlayedThisTurn >= 6)`）
@@ -108,10 +108,10 @@ pub fn play_cap_reached(s: &State) -> bool {
 /// `FetchFromDiscard { remaining: 1 }` + 手牌 10 张（满）+ 弃牌堆 6 张 ——
 /// 6 个合法 `Choose` 全部原地不动。
 ///
-/// 下游各自都打过补丁（`rollout::close_pending` 有"一圈推不动就关掉"的逃生门，
-/// `solver::solve_turn_potions` 有"一个合法终点都没找到"的兜底，注释里甚至
-/// 点名了"比如手牌满了还要从弃牌堆拿牌"），但**L1 自己没有出口** ——
-/// 而 `replay::sync` 从真实游戏灌进来同样的局面时，那些下游补丁一个都不在场。
+/// 下游各自都打过补丁（推演层 有"一圈推不动就关掉"的逃生门，
+/// 搜索层 有"一个合法终点都没找到"的兜底，注释里甚至
+/// 点名了"比如手牌满了还要从弃牌堆拿牌"），但**core 自己没有出口** ——
+/// 而 状态导入层 从真实游戏灌进来同样的局面时，那些下游补丁一个都不在场。
 ///
 /// # 两半都要判
 ///
@@ -147,7 +147,7 @@ pub fn pending_is_satisfiable(s: &State) -> bool {
 ///
 /// 于是内核对外维持一条不变量：**拿到手的 `State` 永远不会带着一个推不动的
 /// `Pending`**。这条不变量买下来的东西：`legal_actions` 的 `Pending` 分支、
-/// `step` 那三处 `pending != None` 的守卫、`solver::dfs` 那条"开着子选择的局面
+/// `step` 那三处 `pending != None` 的守卫、搜索层 那条"开着子选择的局面
 /// 不是合法终点"——**一个字都不用改**，它们的前提自动成立。
 ///
 /// # 关掉 = 这次选择什么也没发生
@@ -646,7 +646,7 @@ pub(crate) fn fire(s: &mut State, hook: Hook, depth: u8) {
 }
 
 /// Restore a vanished reviving enemy by applying its real death rules in an
-/// isolated state. Player death rewards must not be repeated during sync.
+/// isolated state. Player death rewards must not be repeated during 状态导入.
 pub(crate) fn reviving_enemy_snapshot(def: u16, max_hp: i32, adaptable: i32, asc: u8) -> Entity {
     let mut scratch = State::new(1, 1);
     scratch.ascension = asc;
@@ -1224,8 +1224,8 @@ fn run_ops(
                 // **过人工制品**，判据和 `apply_status`（卡牌那条路）逐字相同。
                 // [源码] `ArtifactPower.TryModifyPowerAmountReceived` 挂在
                 // **接收方**身上、不问来源 —— 触发器发出去的 debuff 一样被吃掉。
-                // 漏了这一条在对拍路径上看不见（status 每帧从观测重灌），
-                // [实测] 2026-09-09 `bin/synth_audit`：`act3_f48_boss_aeonglass_2026-09-06`
+                // 漏了这一条在校验路径上看不见（status 每帧从观测重灌），
+                // [实测] 2026-09-09 验证数据：`历史验证样本`
                 // 第 0 帧永世沙漏是 `人工制品 2 · 虚弱 0`（红面具那 1 层被吃掉了），
                 // 内核给的是 `人工制品 3 · 虚弱 1`。
                 let debuff = crate::damage::is_debuff_amount(st, v);
@@ -1315,7 +1315,7 @@ fn resolve_hand_end(s: &mut State) {
 /// 两条合起来的结果是：**场上所有凋萎的层数恒等**。
 ///
 /// 所以内核不另存一个 `WitherUpgradeCount` 计数器，直接从场上同名牌抄 ——
-/// 两者恒等，而这样**不用携带一个观测里没有的量**（`sync` 每帧从观测重建，
+/// 两者恒等，而这样**不用携带一个观测里没有的量**（`状态导入` 每帧从观测重建，
 /// 携带不过来的计数器是这个仓库踩过的坑）。场上一张都没有时抄到 0，
 /// 那正是第一张凋萎的正确层数。
 ///
@@ -1358,7 +1358,7 @@ fn add_generated_to_hand(s: &mut State, id: u16) -> bool {
 ///
 /// [源码] `CreatureCmd.LoseMaxHp`：先算新上限，**当前血高于新上限时把差额当伤害扣掉**
 /// （`Unblockable`），再把上限设过去。走伤害那条路是关键 —— 百年积木就是这么被
-/// 至亮之焰触发的（2026-08-27 第 2 幕第 19 层实测，见 verification-log）。
+/// 至亮之焰触发的（2026-08-27 第 2 幕第 19 层实测，见 验证记录）。
 ///
 /// 卡牌（`Op::LoseMaxHp`）和敌人的能力（`TOp::PlayerLoseMaxHp`，纸伤难愈）共用这一份。
 fn player_lose_max_hp(s: &mut State, n: i32, depth: u8) {
@@ -1574,7 +1574,7 @@ fn resolve_ops(s: &mut State, ops: &[Op], inst: CardInst, cix: usize, target: us
             }
             // 药水给的格挡**不过 `card_block`**：脆弱的卡面原文是「从**卡牌**中
             // 获得的格挡值减少25%」，药水不是牌。
-            // **实测**（`act1_f14` 帧4）：带脆弱 2 时格挡药水仍然给满 12，
+            // **实测**（`历史验证样本` 帧4）：带脆弱 2 时格挡药水仍然给满 12，
             // 而同一局面下防御只给 3（5×3/4）。敏捷那一侧未实测，一并按不吃处理。
             Op::Block { base } => {
                 let b = match src {
@@ -1783,7 +1783,7 @@ fn resolve_ops(s: &mut State, ops: &[Op], inst: CardInst, cix: usize, target: us
             // 过完 `ModifyDamage` 的值 —— 那会把当时的力量/易伤也算进去，
             // 意味着同一张痛殴在不同局面下涨得不一样。这里取**基础值**，
             // 是一个**已知的简化**：不高估玩家，也不让牌的强度依赖打出的时机。
-            // 真实差异要等实战对拍报出来。
+            // 真实差异要等实战校验报出来。
             Op::ExhaustRandomAttackAddDamage => {
                 let mut cand = [0usize; MAX_CARDS];
                 let mut n = 0usize;
@@ -1989,7 +1989,7 @@ fn resolve_ops(s: &mut State, ops: &[Op], inst: CardInst, cix: usize, target: us
             // 走同一条路，撕裂管的是"失去生命"那条路（御血术/烙印）。
             // **加上这一张实例的 `bonus`**。表里那个数是基础值：永世沙漏的
             // 剧烈增强把每一张凋萎 `FakeUpgrade()`（各 +3），层数记在
-            // `CardInst::bonus` 上（游戏把它写进牌名 `凋萎+1`，`sync` 解析）。
+            // `CardInst::bonus` 上（游戏把它写进牌名 `凋萎+1`，`状态导入` 解析）。
             // 灼伤/感染/腐朽/瓦解那几张的 bonus 恒为 0，行为不变。
             Op::TakeDamage(n) => {
                 let through = absorb(&mut s.player, n + inst.bonus as i32);
@@ -2002,7 +2002,7 @@ fn resolve_ops(s: &mut State, ops: &[Op], inst: CardInst, cix: usize, target: us
             // 内核把结果写进 `CardInst::cost_delta`（让**有效费用**等于抽到的数），
             // 和狂乱逃离共用那一个字段。**代价说清楚**：`cost_delta` 是永久的，
             // 而源码那条是"本回合或直到打出"—— 内核少了一次回合末归位。
-            // 对拍上看不见（`sync` 每帧拿观测费用盖回去，那是"观测费用是权威"），
+            // 校验上看不见（`状态导入` 每帧拿观测费用盖回去，那是"观测费用是权威"），
             // 跨回合推演里会**多留一个回合的折扣**。和 `F_FREE_THIS_TURN`
             // 至今也没有回合末清理是同一个洞，两者该一起补。
             Op::RandomizeHandCosts { max } => {
@@ -2074,7 +2074,7 @@ fn resolve_ops(s: &mut State, ops: &[Op], inst: CardInst, cix: usize, target: us
 /// * 第15层，雾菇一死，它召出来的 6 血利齿之眼当场消失，战斗立刻结束
 /// * 第17层 Boss，同族神官一死，两个 34/31 血的同族信徒当场消失
 ///
-/// 不实现这条的话 L2 会以为必须把所有敌人打完 —— 那场 Boss 就会被估成
+/// 不实现这条的话 搜索层会以为必须把所有敌人打完 —— 那场 Boss 就会被估成
 /// 307 血而不是实际需要打的 190。
 ///
 /// **只在场上曾经有过非爪牙时才适用**：万一遇到一场从头到尾只有爪牙的仗，
@@ -2143,7 +2143,7 @@ fn check_over(s: &mut State) {
         s.combat_over = true;
         if just_won {
             // 顺序是 [源码] 定的、也被实录判过：带骨肉(Early) 在燃烧之血之前。
-            // 反过来的话 50% 阈值会拿加过 6 点的血量去判，act2_f31 那场
+            // 反过来的话 50% 阈值会拿加过 6 点的血量去判，历史验证样本 那场
             // （36/80 结束）就会从 +18 变成 +6。
             fire(s, Hook::CombatVictoryEarly, 0);
             fire(s, Hook::CombatVictory, 0);
@@ -2383,7 +2383,7 @@ fn decay(e: &mut Entity) {
 ///
 /// 敌人回合的每一击都走这里，不管这个数字是内核自己按 `EnemyDef` 算的
 /// （[`enemy_turn`]）还是外部给定的（[`end_turn_with_incoming`]）——
-/// 后者是 L2 求解器的入口，让它拿观测到的意图标签当威胁，而**不用自己实现
+/// 后者是 上层求解器的入口，让它拿观测到的意图标签当威胁，而**不用自己实现
 /// 格挡吸收、孤注一掷、火焰屏障这些规则**。写成一个函数就是为了保证
 /// 两条路径永远不会长歪。
 pub(crate) fn take_attack_hit(s: &mut State, attacker: usize, d: i32) {
@@ -2624,7 +2624,7 @@ fn resolve_set(s: &State, e: usize, h: &[u8; ENEMY_HIST], used: u32, n: Next) ->
     }
 }
 
-/// 按权重采样下一手。**只给 rollout 用**；对拍那条路走 [`allowed_next`]，
+/// 按权重采样下一手。**只给 推演层 用**；校验那条路走 [`allowed_next`]，
 /// 不采样。用 `rng.enemy` 流（不变量 4 的三条分流之一）。
 fn pick_next(s: &mut State, e: usize) -> u8 {
     let def = enemy_def(s.enemy_def[e]);
@@ -2639,7 +2639,7 @@ fn pick_next(s: &mut State, e: usize) -> u8 {
         Next::Go(i) => i,
         // 条件分支不掷骰：取集合最低位。大于 1 位只会发生在"内核判不出条件"
         // 的时候，那时**任选一个都是猜** —— 取最低位至少是确定性的，
-        // 不会让同一个局面每次 rollout 出不同结果。
+        // 不会让同一个局面每次 推演层 出不同结果。
         Next::Cond(_) => resolve_set(s, e, &h, u, n).trailing_zeros() as u8,
         Next::Rand(bs) => {
             let mut total = 0u32;
@@ -2682,8 +2682,8 @@ pub fn initial_move(s: &State, e: usize) -> u8 {
     let empty = [u8::MAX; ENEMY_HIST];
     match m.start {
         Next::Go(i) => i,
-        // 开局的随机分支：内核**不掷骰**，因为对拍那条路要的是集合不是样本。
-        // rollout 想采样的话走 `pick_next`，那时已经有当前手了。
+        // 开局的随机分支：内核**不掷骰**，因为校验那条路要的是集合不是样本。
+        // 推演层 想采样的话走 `pick_next`，那时已经有当前手了。
         // 这里取集合里的一个确定性代表元：有槽位提示且它在集合里就取它，否则取最低位。
         // 「在集合里」这一条让确定成立的分支优先 —— 那时集合只剩那一支。
         n => {
@@ -2702,7 +2702,7 @@ pub fn initial_move(s: &State, e: usize) -> u8 {
 }
 
 /// **这一手在当前局面下，出招机器走不走得到。** 给实况对齐挑签名歧义用
-/// （`Replayer::identify_enemies`）：两手签名逐字相同时，排掉「进它的边全是条件边、
+/// （状态导入层）：两手签名逐字相同时，排掉「进它的边全是条件边、
 /// 而那些条件在当前局面下都确定不成立」的那一手。
 ///
 /// 今天唯一的歧义是蜂群术士的喷射信息素（按蜂房层数拆成两手，都是 `Buff`）。
@@ -2797,9 +2797,9 @@ fn advance_move(s: &mut State, e: usize) {
 /// 知识的诅咒落地：第 k 次（k 从我身上的诅咒 status 反推）按 `curse_policy` 第 k 位挑一边。
 ///
 /// **不是 `Pending`**：[源码] 这个选牌屏开在敌人回合中间，而 `step(EndTurn)` 是原子的 ——
-/// 让它停在半路等玩家选，planner 的回合边界拆分和 rollout 的闭环都得改。
+/// 让它停在半路等玩家选，规划层的回合边界拆分和 推演层的闭环都得改。
 /// 这个选择的价值全在后面几个回合，单回合求解器本来也定不了价，所以做成**策略参数**：
-/// L3 把 8 种选法配对比，实战里由玩家选。
+/// 评估层 把 8 种选法配对比，实战里由玩家选。
 ///
 /// 四个诅咒都是 debuff，人工制品挡得住；挡掉之后内核反推不出这一次（见 `content::curses_taken`）。
 fn apply_curse_choice(s: &mut State, sets: &[crate::ops::CurseSet]) {
@@ -3080,13 +3080,13 @@ fn enemy_turn(s: &mut State) {
 
 /// 我的回合开始，**但不抽牌**。
 ///
-/// 拆出来是给跨回合 planner 用的：机会节点（这一手抽到什么）必须插在
+/// 拆出来是给规划层 用的：机会节点（这一手抽到什么）必须插在
 /// 「敌人打完、回合开始结算做完」和「抽牌」之间，而 `step(EndTurn)` 把这
 /// 一整段做成了一个原子动作。
 ///
 /// **拆的方式是"切开"不是"抄一份"**：`start_player_turn` 现在就是
 /// 这个函数加一句 `open_hand`，两条路径不可能长歪。
-/// 和当初为 L2 加 `end_turn_with_incoming` 是同一个先例。
+/// 和当初为 搜索层加入 `end_turn_with_incoming` 是同一个先例。
 fn start_player_turn_before_draw(s: &mut State) {
     // 我这一边的回合开始，**最早一档**（[源码] `BeforeSideTurnStart`）：
     // 清格挡、能量回满、`TurnStart`（水银沙漏 / 滚石打敌人）全在它后面。见 `Hook::SideTurnStart`。
@@ -3139,8 +3139,8 @@ pub const BASE_HAND_DRAW: usize = 5;
 /// **这一手开局发牌会往手里放几张**（抽牌堆 + 弃牌堆够的话）。
 ///
 /// 只在「回合开始、还没发牌」的局面上有意义（`end_turn_before_draw` 的输出）——
-/// `open_hand` 发的就是这个数，**planner 的机会节点也读它**：抽几张是 L1 的规则，
-/// L2 不许抄一份。2026-09-25 之前机会节点写死 5，心灵腐化那一手实际只抽 4，
+/// `open_hand` 发的就是这个数，**规划层的机会节点也读它**：抽几张是 core 的规则，
+/// 搜索层不应抄一份。2026-09-25 之前机会节点写死 5，心灵腐化那一手实际只抽 4，
 /// 6 张不同的牌逐张进手概率被算成 0 / 2/3 / 5/6 ×4（真值每张 2/3），概率和照样是 1。
 ///
 /// 照 [源码] 的顺序：
@@ -3159,7 +3159,7 @@ pub fn hand_draw_count(s: &State) -> usize {
     (n as usize).min(MAX_HAND.saturating_sub(s.n_hand as usize))
 }
 
-/// 发开局手牌（[`hand_draw_count`] 张）。**跨回合 planner 的机会节点就插在它前面。**
+/// 发开局手牌（[`hand_draw_count`] 张）。**规划层的机会节点就插在它前面。**
 ///
 /// 清晰/稳定血清那类「改每回合抽几张」的药水没建，理由在 `ops.rs::POTIONS` 表头 ——
 /// 将来有了，进 `hand_draw_count`。
@@ -3175,7 +3175,7 @@ pub fn open_hand(s: &mut State) {
     check_over(s);
     // **抽牌本身就能把一个子选择变成推不动的**（上回合留下来的头槌/涅奥之怒，
     // 这一手把手牌抽满了）。`open_hand` 是 `step` 之外的一个入口 ——
-    // planner 的机会节点和 `Leaf::Rollout` 都直接调它，见 `close_pending_if_stuck`。
+    // 规划层的机会节点和 `Leaf::推演层` 都直接调它，见 `close_pending_if_stuck`。
     close_pending_if_stuck(s);
 }
 
@@ -3188,7 +3188,7 @@ fn start_player_turn(s: &mut State) {
 /// **已经是过完所有乘区的最终值**。
 ///
 /// 这正是观测到的意图标签的语义（实测：攻击方力量和防御方易伤都算在里面了，
-/// 见 `docs/trace-format.md` 约束 4），所以实战驱动时可以逐字照抄。
+/// 见 验证数据 约束 4），所以外部实时驱动时可以逐字照抄。
 pub type Incoming = [(i32, i32); MAX_ENEMIES];
 
 pub const NO_INCOMING: Incoming = [(0, 0); MAX_ENEMIES];
@@ -3205,7 +3205,7 @@ fn injected_enemy_turn(s: &mut State, inc: &Incoming, live: bool) {
     // **注入路径也要发这个钩子。** 它管的是"敌人整边开始时发生的事"，
     // 和"这一手打多少"是两件事 —— 注入的只有后者。
     //
-    // 漏掉它的代价是**结构性**的：沙坑的即死倒计时挂在这里，而 L2 走的
+    // 漏掉它的代价是**结构性**的：沙坑的即死倒计时挂在这里，而 搜索层走的
     // 正是这条注入路径 ⇒ 求解器**永远看不见自己会被吞掉**。
     // 2026-09-05 第 2 幕 Boss 那次 AI 驾驶就死在这上面：第 8 回合沙坑归零，
     // 而求解器全程把狂乱逃离评成"0 伤害 0 格挡的废牌"。
@@ -3258,7 +3258,7 @@ fn injected_enemy_turn(s: &mut State, inc: &Incoming, live: bool) {
             };
             take_attack_hit(s, e, d);
         }
-        // 出招指针照常推进：跨回合 rollout 换成 `EnemyDef` 预测威胁时，
+        // 出招指针照常推进：跨回合 推演层 换成 `EnemyDef` 预测威胁时，
         // 下一回合要接着这个指针往下猜。
         // **挨打途中被改了招就不推进**（反伤打死瀑布巨兽），理由同 `enemy_turn`。那个
         // `MoveForcedThisTurn` 留着：下一个注入回合读到它，跳过伤害再推进 —— 正好是「即将爆发」不打人。
@@ -3273,7 +3273,7 @@ fn injected_enemy_turn(s: &mut State, inc: &Incoming, live: bool) {
     // 它们管的是"敌人整边**结束**时发生的事"，和"这一手打多少"是两件事 ——
     // 注入的只有后者。
     //
-    // 漏掉它们同样是**结构性**的：L2 走的正是这条注入路径，于是每一个叶子上
+    // 漏掉它们同样是**结构性**的：搜索层走的正是这条注入路径，于是每一个叶子上
     // 敌人都不涨力量（仪式 / 高压 / 领地意识）、覆甲不给格挡、沉睡/熟睡不掉层、
     // 宿敌不切无实体。方向清一色是**乐观**（敌人比真实的弱）。
     // [实测] 2026-09-22，一手纯攻击招上单独量出来的三笔：
@@ -3292,8 +3292,8 @@ fn injected_enemy_turn(s: &mut State, inc: &Incoming, live: bool) {
 
 /// 结束回合，敌人这一手的伤害由**调用方**给定（见 [`Incoming`]）。
 ///
-/// 存在的理由：L2 求解器不许自己实现游戏规则，但它必须知道"这条线打完之后
-/// 挨完打还剩多少血"。把威胁做成输入、把结算留在 L1，两边都不用妥协 ——
+/// 存在的理由：上层求解器不许自己实现游戏规则，但它必须知道"这条线打完之后
+/// 挨完打还剩多少血"。把威胁做成输入、把结算留在 core，两边都不用妥协 ——
 /// 换威胁的提供者（观测意图 / `EnemyDef` 预测）不影响这个函数。
 pub fn end_turn_with_incoming(s: State, inc: &Incoming) -> State {
     if s.combat_over {
@@ -3308,7 +3308,7 @@ pub fn end_turn_with_incoming(s: State, inc: &Incoming) -> State {
 /// # 为什么要有这条路
 ///
 /// `Threat` 原来只能装"观测到的意图标签"，而那是**同步那一刻就冻住的常数**。
-/// 后果是：凡是"我这一手会改敌人这一击打多少"的东西，L2 一概看不见 ——
+/// 后果是：凡是"我这一手会改敌人这一击打多少"的东西，搜索层 一概看不见 ——
 /// 给敌人上虚弱、凌虐减 10 力量、巨像减半、我自己吃污染、转身改朝向，
 /// 全都是空操作。2026-08-27 第 2 幕 Boss 那一场，求解器因此报「这样打仍然会死」，
 /// 而实际存在一条把 36 点来袭压到 24 的活线（虚弱药水 + 转身 + 敏捷加成）。
@@ -3317,7 +3317,7 @@ pub fn end_turn_with_incoming(s: State, inc: &Incoming) -> State {
 ///
 /// # 两条路都要留着
 ///
-/// * **对拍必须用冻住的那条**：`verify` 的契约是"敌人打多少由观测注入"，
+/// * **校验必须用冻住的那条**：`verify` 的契约是"敌人打多少由观测注入"，
 ///   现算等于让内核自己预测敌人，那是"内核和内核比"。
 /// * **敌人认不出来时也只能用冻住的那条**：不知道它这一手的面板基础值，
 ///   就没有东西可以重算。`Threat::set` 和 `Threat::set_live` 分别对应两种情况。
@@ -3332,12 +3332,12 @@ fn end_turn(s: State) -> State {
     end_turn_impl(s, None, true)
 }
 
-/// 结束回合，但**停在抽牌之前**。跨回合 planner 用它给机会节点让出位置：
+/// 结束回合，但**停在抽牌之前**。规划层 用它给机会节点让出位置：
 /// 拿到的局面是「敌人打完、回合开始的结算都做完、手牌还是空的」。
 ///
 /// 抽牌自己调 [`open_hand`]。**`end_turn_before_draw` + `open_hand`
 /// 必须逐字节等于 `step(EndTurn)`**，`end_turn_split_equals_the_atomic_one`
-/// 钉着这条 —— 拆出来的东西一旦和原路径分岔，planner 就在另一个游戏里搜。
+/// 钉着这条 —— 拆出来的东西一旦和原路径分岔，规划层 就在另一个游戏里搜。
 pub fn end_turn_before_draw(s: State) -> State {
     end_turn_impl(s, None, false)
 }
@@ -3391,7 +3391,7 @@ fn end_turn_impl(mut s: State, inc: Option<(&Incoming, bool)>, open: bool) -> St
         // **保留（`F_RETAIN`）的牌留在手上。** 今天唯一的来源是附魔
         // （王室认证 / 沉稳），见 `content::ENCHANTS`。
         //
-        // [实测] 2026-09-06 `act3_f46_elite_soul_nexus` 两个回合边界：
+        // [实测] 2026-09-06 `历史验证样本` 两个回合边界：
         // 带王室认证的均衡+ 留下、同一手的添柴+ 被弃掉。
         //
         // 逐个走而不是 `while n_hand > 0`：留下的那几张要**保持在手上**，
@@ -3442,7 +3442,7 @@ fn end_turn_impl(mut s: State, inc: Option<(&Incoming, bool)>, open: bool) -> St
         open_hand(&mut s);
     }
     check_over(&mut s);
-    // `end_turn_before_draw`（`open == false`）是跨回合 planner 的回合边界，
+    // `end_turn_before_draw`（`open == false`）是规划层的回合边界，
     // 它不经过 `step` 也不经过 `open_hand` —— 同一条出口收口要自己走一遍。
     close_pending_if_stuck(&mut s);
     s
@@ -3600,7 +3600,7 @@ fn step_inner(mut s: State, a: Action) -> State {
                 return s;
             }
             // 懒惰 / 天鹅绒颈圈：`legal_actions` 不给打，`step` 也要原样返回（不变量 5）。
-            // 轰鸣故意没收进来：它一直只在 `legal_actions` 那一侧，改它要单独过一遍对拍。
+            // 轰鸣故意没收进来：它一直只在 `legal_actions` 那一侧，改它要单独过一遍校验。
             if play_cap_reached(&s) {
                 return s;
             }
@@ -3625,7 +3625,7 @@ fn step_inner(mut s: State, a: Action) -> State {
                 // **一个活着的敌人都没有，但战斗还没结束**：实验体被砍掉一条命
                 // 之后整个我方回合它都不在场（`State::any_enemy_present`），
                 // 而出牌阶段还开着、能量也还在。[实测] 那个窗口里**无目标牌
-                // 照样打得出去**（act3_f48 帧11/12 打了坚定不移+ 和 时候未到），
+                // 照样打得出去**（历史验证样本 帧11/12 打了坚定不移+ 和 时候未到），
                 // 打不出去的只有攻击牌 —— 它们没有目标。
                 //
                 // 原来这一支无条件返回原状态，于是**每一张牌都被拒**：
@@ -3654,7 +3654,7 @@ fn step_inner(mut s: State, a: Action) -> State {
 /// **两个调用点必须共用它**：卡牌/药水那条路（[`apply_status`]）和遗物开局赠予
 /// 那条路（[`grant_relics`] 的第二趟）。金刚杵的 1 点力量在游戏里走的也是
 /// `PowerCmd.Apply`，一样会被头盔翻倍 —— [实测] 2026-09-09
-/// `act3_f48_boss_aeonglass_2026-09-06` 第 0 帧玩家力量是 **2**（金刚杵 1 × 2）。
+/// `历史验证样本` 第 0 帧玩家力量是 **2**（金刚杵 1 × 2）。
 ///
 /// 它读的是 **status**（`RULE_MODIFIERS` 里登记着），不是 `if 有没有某遗物`。
 pub(crate) fn modify_status_amount_received(s: &mut State, to_player: bool, st: St, amt: i32) -> i32 {
@@ -3667,25 +3667,25 @@ pub(crate) fn modify_status_amount_received(s: &mut State, to_player: bool, st: 
 
 /// 把一件遗物的**战斗层状态**交给玩家实体。**必须在 [`begin_combat`] 之前调用。**
 ///
-/// # 为什么这条规则在 L1 而不在 L3
+/// # 为什么这条规则在 core 而不在评估层
 ///
 /// 遗物在这个内核里没有自己的实体，它的全部战斗层效果都是**挂在玩家身上的
 /// status**（`RelicDef::start_status` / `private_status` / `counter_to`），规则由
 /// `POWERS` 和 `damage.rs` 认那些 status 来跑 —— 一个 `if 有没有某遗物` 都没有。
-/// 「哪件遗物给哪几个 status」因此是游戏规则的一部分，按不变量它就该在 L1，
-/// 让 L3 自己抄一遍等于把规则复制到上层。
+/// 「哪件遗物给哪几个 status」因此是游戏规则的一部分，按不变量它就该在 core，
+/// 让 评估层 自己抄一遍等于把规则复制到上层。
 ///
 /// # 三栏的处置各不相同（照 `RelicDef` 那三栏的注释）
 ///
 /// * `start_status` —— 游戏也会报的量（金刚杵的力量、护喉甲的覆甲）。
-///   **对拍那条路不走这里**（观测里本来就有），这个函数是给「内核自己开一场仗」用的
+///   **校验那条路不走这里**（观测里本来就有），这个函数是给「内核自己开一场仗」用的
 /// * `private_status` —— 游戏不报的内核私有记账（臂甲的充能）
 /// * `counter_to` —— 面板上那个**跨战斗保留**的计数器。`None` 一律当 0，
 ///   而 0 对摆动球那种相位量**是个静默的错**：调用方拿得到就传，
-///   拿不到该由调用方点名报出来（`synth::Gap::RelicCounterMissing`）
+///   拿不到该由调用方点名报出来（战斗构造层）
 ///
 /// 用 `add` 不用 `set`：两件遗物给同一个 status 时该叠加。
-/// （`replay::sync` 那条路是逐帧 `set` 回去的 —— 那边每帧重建，语义不同。）
+/// （状态导入层 那条路是逐帧 `set` 回去的 —— 那边每帧重建，语义不同。）
 ///
 /// # 两趟，顺序不能换
 ///
@@ -3755,7 +3755,7 @@ pub fn begin_combat(mut s: State) -> State {
         for (st, amt) in crate::content::enemy_start_player_status(def.name) {
             s.player.add(st, amt);
         }
-        // 游戏不报、规则要读的身份标记（骑士团的施咒者）。对拍路径在 `replay::sync` 里按
+        // 游戏不报、规则要读的身份标记（骑士团的施咒者）。校验路径在 状态导入层 里按
         // 观测到的名字挂同一张表，见 `content::ENEMY_PRIVATE_MARKERS`。
         for (st, v) in crate::content::enemy_private_markers(def.name) {
             s.enemies[e].set(st, v);
@@ -3766,10 +3766,10 @@ pub fn begin_combat(mut s: State) -> State {
     // 那一刻玩家朝右，**从左边打来的**（`BackAttackLeft`）才吃 ×1.5。
     // 内核的 `St::FacingRight` 默认 0（朝左），正好反了。
     //
-    // [实测] 2026-09-09 `act2_f33_boss_crusher` 第 0 帧的意图标签：
+    // [实测] 2026-09-09 `历史验证样本` 第 0 帧的意图标签：
     // 碾碎爪（左）**18 = 12×1.5**、火箭（右）**3**（面板值，没乘）。
-    // 对拍那条路不受影响 —— 那边朝向是从意图标签反推的
-    // （`replay::infer_facing`），它每帧重推、自愈。
+    // 校验那条路不受影响 —— 那边朝向是从意图标签反推的
+    // （状态导入层），它每帧重推、自愈。
     if s.player.get(St::Surrounded) > 0 {
         s.player.set(St::FacingRight, 1);
     }

@@ -28,8 +28,8 @@ pub mod card {
     pub const DEMON_FORM: u16 = 11;
     pub const RUTHLESS: u16 = 12;
     pub const WOUND: u16 = 13;
-    /// 占位：trace 里出现了内容表还没有的牌。没有任何效果，且不可打出，
-    /// 所以它进入模拟时**不会伪造行为**——对拍器靠它把"我不认识"和"我算错了"
+    /// 占位：验证样本 里出现了内容表还没有的牌。没有任何效果，且不可打出，
+    /// 所以它进入模拟时**不会伪造行为**——校验器靠它把"我不认识"和"我算错了"
     /// 分开（见 `replay.rs`）。抽牌堆里内容未知的牌也用它填充。
     pub const UNKNOWN: u16 = 14;
     pub const HEMOKINESIS: u16 = 15;
@@ -43,7 +43,7 @@ pub mod card {
     pub const ROLLING_BOULDER: u16 = 22;
     pub const VICIOUS: u16 = 23;
     // 24-52：靠现有原语 + 这一轮新加的叶子 Op 灌进来的一批。
-    // 卡面全部来自权威卡表 `traces/cards_catalog.json`，**均未实战对拍**。
+    // 卡面全部来自权威卡表 `traces/cards_catalog.json`，**均未实战校验**。
     pub const COMBUST: u16 = 24;
     pub const IRON_WAVE: u16 = 25;
     pub const SHRUG_IT_OFF: u16 = 26;
@@ -134,7 +134,7 @@ pub mod card {
     pub const WITHER: u16 = 99;
     /// 至亮之焰（[源码] `BrightestFlame`）。遗物「故事书」拾起时塞进牌组的那张。
     pub const BRIGHTEST_FLAME: u16 = 100;
-    /// 贪婪之手（[源码] `HandOfGreed`）。**金币那一半 L1 不管** —— 见 CardDef 注释。
+    /// 贪婪之手（[源码] `HandOfGreed`）。**金币那一半 core 不管** —— 见 CardDef 注释。
     pub const HAND_OF_GREED: u16 = 101;
     // ---- 2026-08-30 补的一批。权威表刷新（106 -> 128 张）之后逐张读源码建的 ----
     /// 亮剑（[源码] `FlashOfSteel`）
@@ -189,7 +189,7 @@ pub mod card {
 ///
 /// 换表之后**现有内容一个字节都没变**：当时表里所有 ops 为空的状态/诅咒牌
 /// 恰好就是这张表里的这些，黏液（有 ops）恰好不在。所以这次改动对既有语料
-/// 是恒等变换，五项对拍应当原样保持 —— 对不上就说明表填错了。
+/// 是恒等变换，五项校验应当原样保持 —— 对不上就说明表填错了。
 ///
 /// 和 `X_COST_CARDS` / `RULE_MODIFIERS` 同一个风格：少数牌才有的性质用表登记。
 pub static UNPLAYABLE_CARDS: &[u16] = &[
@@ -280,7 +280,7 @@ pub static CARDS: &[CardDef] = &[
     //     打击 6×2/3=4 ✓   痛击 8×2/3=5.33→5 ✓   打击带易伤 6×2/3×1.5=6 ✓
     // 三个观测能同时满足加性和乘性两套解，是第四个观测把它们分开的。
     //
-    // 教训就是本仓库自己写过的那句：**以对拍结果为准，不要凭直觉改数字**。
+    // 教训就是本仓库自己写过的那句：**以校验结果为准，不要凭直觉改数字**。
     // 手上只有欠定的数据点时，正确做法是让 verify 报 UNKNOWN_CONTENT 等更多样本，
     // 而不是挑一组自洽的解写进表里。
     CardDef {
@@ -474,7 +474,7 @@ pub static CARDS: &[CardDef] = &[
         ops_upg: NO_OPS,
         cost_upg: 0,
     },
-    // 14 未知牌 —— 对拍占位，见 card::UNKNOWN
+    // 14 未知牌 —— 校验占位，见 card::UNKNOWN
     CardDef {
         name: "<未知牌>",
         cost: 0,
@@ -529,15 +529,15 @@ pub static CARDS: &[CardDef] = &[
     },
     // ---- 17-22 触发式能力牌 ----
     //
-    // 这六张是触发器系统的验收样本：**每一张都只是一行 `Op::Status`**，
+    // 这六张是触发器系统的外部验证样本：**每一张都只是一行 `Op::Status`**，
     // `step.rs` 里没有为它们加过任何一行代码，行为全在 `POWERS` 表里。
-    // 卡面数值来自 `traces/cards_catalog.json`，**尚未实战对拍**。
+    // 卡面数值来自 `traces/cards_catalog.json`，**尚未实战校验**。
     //
     // 17 薪火之源「在回合开始时，获得1能量。」升级 2 能量。
     //
     // **实际是能量上限 +1，不是回合开始给 1 点。** 实测（第1幕 Boss）：
     // 打出的瞬间显示就从 `3/3` 变成 `1/4`。按卡面建成 TurnStart 钩子会和
-    // `sync` 拿到的 `max_energy` 重复计数，对拍当场报出 `能量 游戏=4 内核=5`。
+    // `状态导入` 拿到的 `max_energy` 重复计数，校验当场报出 `能量 游戏=4 内核=5`。
     // `PYRE_POWER` 这个 status 只是显示印记，见 `MARKER_STATUSES`。
     CardDef {
         name: "薪火之源",
@@ -627,7 +627,7 @@ pub static CARDS: &[CardDef] = &[
 
     // ======================================================================
     // 24-52 批量灌入。卡面全部逐字来自权威卡表 `traces/cards_catalog.json`
-    //（`GET /api/v1/wiki`，含升级版），**没有一张在实战里对拍过**。
+    //（`GET /api/v1/wiki`，含升级版），**没有一张在实战里校验过**。
     //
     // `targeted` 是按卡面文本判的（"给予N层易伤" = 单体，"所有敌人" = 全体），
     // 卡表里**没有 target_type 字段**，所以这一列是推断不是数据。判错的话
@@ -1074,7 +1074,7 @@ pub static CARDS: &[CardDef] = &[
     // 那份反编译没有版本串，而拿它和实时游戏导出的权威卡表对了 105 张，
     // 实质一致 104 张、`巨像` 的稀有度有一处真冲突（源码 Rare / 游戏 Uncommon），
     // 说明它**不是当前线上版本**。冲突时以游戏为准。
-    // 这五张一张都没在实战里打出去过，第一次打出时对拍会当场判它们。
+    // 这五张一张都没在实战里打出去过，第一次打出时校验会当场判它们。
     // ---------------------------------------------------------------------
 
     // 71 [源码] 飞剑回旋镖「造成3点伤害，随机3次。」升级：4 次（伤害不变）
@@ -1115,7 +1115,7 @@ pub static CARDS: &[CardDef] = &[
     //
     // **第二句 2026-09-06 才补上**，在此之前内核只建了第一句 —— 方向是**乐观**：
     // 求解器以为可以先跃跃欲试拿 3 点，再被遗忘的仪式拿 3 点，而游戏给 0。
-    // 抓到它的是 `act3_f46_elite_soul_nexus`（录完 3 分钟就跑了验收）报的
+    // 抓到它的是 `历史验证样本`（录完 3 分钟就跑了外部验证）报的
     // 「没映射的 status: NO_ENERGY_GAIN_POWER×5」—— **那一栏不是红，是静默的洞**：
     // 没映射的字段根本不参与比较。顺着它翻源码才看见 `Apply<NoEnergyGainPower>`。
     //
@@ -1263,7 +1263,7 @@ pub static CARDS: &[CardDef] = &[
     // **它自己不消耗**：[源码] `Stoke` 没有 `Exhaust` 关键字，`OnPlay` 消耗的是
     // **手牌堆**（此时添柴已经离开手牌，所以烧不到自己），打完照常进弃牌堆。
     // 内核原来写的 `exhausts: true` 是错的，2026-08-22 第2幕第20层第一次
-    // 打出添柴+ 当场被对拍抓到（消耗堆多一张、弃牌堆少一张）。
+    // 打出添柴+ 当场被校验抓到（消耗堆多一张、弃牌堆少一张）。
         name: "添柴", cost: 1, kind: Kind::Skill, targeted: false, exhausts: false,
         cost_minus_attacks: false,
         ops: &[Op::ExhaustHandGenerate { upgraded: false }],
@@ -1460,7 +1460,7 @@ pub static CARDS: &[CardDef] = &[
     // 建它不是为了效果，是为了**别再落进 `card::UNKNOWN`** —— 落进去
     // `solve --live` 每回合都要报一次"手牌里有内容表还没有的牌"，
     // 而真正该被那行点名的是内核不知道效果的牌，不是它。
-    // 费用取游戏 API 的 0（源码那个 -1 是"不可打出"的编码，见 verification-log
+    // 费用取游戏 API 的 0（源码那个 -1 是"不可打出"的编码，见 验证记录
     // 「反编译不是当前版本」一节里那 10 张状态/诅咒牌的同一处差异）。
     CardDef {
         name: "藏宝图", cost: 0, kind: Kind::Quest, targeted: false, exhausts: false,
@@ -1485,7 +1485,7 @@ pub static CARDS: &[CardDef] = &[
     // **沙坑 == 1 的回合，这张牌是唯一的活路，单回合求解器自己就看得见**
     //（结束回合 -> 敌人回合开始 -> 减到 0 -> 死）。
     // 沙坑 ≥ 2 时它的价值仍然在单回合视角之外，由叶评估的
-    // `solver::clock_value`（`Weights::clock`）计价，见那里。
+    // 搜索层（`Weights::clock`）计价，见那里。
     CardDef {
         name: "狂乱逃离", cost: 1, kind: Kind::Status, targeted: false, exhausts: false,
         cost_minus_attacks: false,
@@ -1525,7 +1525,7 @@ pub static CARDS: &[CardDef] = &[
     // [源码] `HandOfGreed`：`DamageVar(20, Move)` + `DynamicVar("Gold", 20)`，
     // 2 费攻击，升级只动这两个数字（费用不变）。
     //
-    // **金币那一半故意不建**：金币是局外资源，L1 里根本没有这个字段，
+    // **金币那一半故意不建**：金币是局外资源，core 里根本没有这个字段，
     // 而这张牌在战斗里的行为**完全由伤害那一半决定** ——
     // 所以这不是"建了一半"，是"另一半不属于这一层"。
     // （对比百年积木那次：那才是真的建了一半，触发路径漏了一条。）
@@ -1542,7 +1542,7 @@ pub static CARDS: &[CardDef] = &[
     // 顺手重导权威表，发现它从 106 涨到了 **128 张**（档案又发现了 22 张）。
     // 下面 9 张是**现有原语就能表达**的那些，每张都读了 [源码]，
     // 卡面和源码不一致时以源码为准（坚定不移就是一例，见它自己的注释）。
-    // 剩下 18 张各自卡在一个还没有的机制上，逐条记在 docs/content.md。
+    // 剩下 18 张各自卡在一个还没有的机制上，逐条记在 验证数据。
 
     // 102 [源码] 亮剑「造成5点伤害。抽1张牌。」升级 8 点
     //     `FlashOfSteel`：`DamageCmd.Attack(5)` 然后 `CardPileCmd.Draw(1)`，
@@ -1616,14 +1616,14 @@ pub static CARDS: &[CardDef] = &[
         cost_minus_attacks: false, ops: NO_OPS, ops_upg: NO_OPS, cost_upg: 1,
     },
     // 108 [源码] 贪婪「不能被打出。永恒。」
-    //     `Eternal`（不能被移除）是**局外**性质，L1 不管。战斗层就是一张废牌。
+    //     `Eternal`（不能被移除）是**局外**性质，core 不管。战斗层就是一张废牌。
     CardDef {
         name: "贪婪", cost: 0, kind: Kind::Curse, targeted: false, exhausts: false,
         cost_minus_attacks: false, ops: NO_OPS, ops_upg: NO_OPS, cost_upg: 0,
     },
     // 109 [源码] 债务「不能被打出。在你的回合结束时，如果这张牌在你的手牌中，你失去10金币。」
     //     金币是**局外资源**，和贪婪之手的金币那一半同一个判断：
-    //     不属于 L1，所以战斗层它就是一张占位的废牌。**这不是"建了一半"**。
+    //     不属于 core，所以战斗层它就是一张占位的废牌。**这不是"建了一半"**。
     CardDef {
         name: "债务", cost: 0, kind: Kind::Curse, targeted: false, exhausts: false,
         cost_minus_attacks: false, ops: NO_OPS, ops_upg: NO_OPS, cost_upg: 0,
@@ -1697,12 +1697,12 @@ pub static CARDS: &[CardDef] = &[
     // `State::hp_loss_hits`）。所以走 `Op::DamagePerHpLossHit`。
     //
     // **第一版照卡面写死了 `hits: 3`，那是错的** —— 游戏把算好的段数直接渲染
-    // 进卡面文本（`（命中3次）`），录到 trace 里的那句话是**当时那一刻的快照**。
-    // [实测] `act2_f28_decimillipede` 帧31 卡面「命中3次」，而在那之前我只有
+    // 进卡面文本（`（命中3次）`），录到 验证样本 里的那句话是**当时那一刻的快照**。
+    // [实测] `历史验证样本` 帧31 卡面「命中3次」，而在那之前我只有
     // 一个回合边界掉过血（55 -> 44）—— 那一手是残杀千足虫的多段攻击，
     // **两段打穿了 8 点格挡**，所以 M=2、段数 3。逐帧数掉血的**回合数**会得到
     // M=1，那是错的：数的是伤害**次数**。
-    // [实测] `act1_f17_waterfall_giant` 帧63 同一张牌卡面「命中8次」。
+    // [实测] `历史验证样本` 帧63 同一张牌卡面「命中8次」。
     CardDef {
         name: "扯碎", cost: 2, kind: Kind::Attack, targeted: true, exhausts: false,
         cost_minus_attacks: false,
@@ -1717,7 +1717,7 @@ pub static CARDS: &[CardDef] = &[
     // 依据是权威卡表 `keywords` 里有「消耗」—— 那一栏是**描述文本里出现过的
     // 名词表**（这里的"消耗"来自「消耗**牌堆**」四个字），不是这张牌的关键字。
     // [源码] `HowlFromBeyond` 根本没有 `CanonicalKeywords`；
-    // [实测] 2026-09-09 `act1_f7_sewer_clam` 帧1→2：打出去之后它进的是**弃牌堆**，
+    // [实测] 2026-09-09 `历史验证样本` 帧1→2：打出去之后它进的是**弃牌堆**，
     // 消耗堆一张没动。
     //
     // > **别把卡面的关键字词表当成这张牌的关键字。** 表里另外 12 张
@@ -1736,7 +1736,7 @@ pub static CARDS: &[CardDef] = &[
     // `AutoPostPlay` 阶段在 `Hook.BeforeTurnEnd` **之前**，见 `CombatManager`）。
     //
     // 2026-09-06 补进来。在此之前它是「缺的 17 张」之一，同步成 `<未知牌>` ——
-    // 于是 `act3_f46` 帧35 红了一帧：原始力量+ 该把它变成巨石+，而 `<未知牌>`
+    // 于是 `历史验证样本` 帧35 红了一帧：原始力量+ 该把它变成巨石+，而 `<未知牌>`
     // 的 `kind` 不是攻击，内核没变它。**内容缺失会以"规则错了"的样子露头。**
     CardDef {
         name: "彼岸咆哮", cost: 3, kind: Kind::Attack, targeted: false, exhausts: false,
@@ -1782,7 +1782,7 @@ pub static EXHAUST_END_AUTOPLAY: &[u16] = &[card::HOWL_FROM_BEYOND];
 // 不需要在这张表里再开一行。
 //
 // **数值全部来自权威卡表 `traces/cards_catalog.json`（GET /api/v1/wiki），
-// 除恶魔形态外都还没在实战里对拍过。**
+// 除恶魔形态外都还没在实战里校验过。**
 pub static POWERS: &[PowerDef] = &[
     // ---- 遗物：第 4 期的六件。数值和条件全部取自 [源码]，**不是卡面** ----
     //
@@ -1999,11 +1999,11 @@ pub static POWERS: &[PowerDef] = &[
     //
     // 和准备背包/花粉核心逐字同一个形状：`TurnStart` 上记 +1，`open_hand` 发 6 张。
     // **2026-09-25 之前是在 `TurnStart` 上先抽 1 张**（理由是"先抽 1 再抽 5 和一次抽 6
-    // 取到的是同一批牌"）—— 对 L1 自己确实一样，但那一张抽在 planner 的机会节点**之前**，
+    // 取到的是同一批牌"）—— 对 core 自己确实一样，但那一张抽在 规划层的机会节点**之前**，
     // 取的是内核那次洗牌的牌序：6 张不同的牌里它进手 100%、别的 5/6，真值 6/7，
     // 换 `Plan::seed` 也不变。
     //
-    // [实测] 2026-09-06 `act3_f46_elite_soul_nexus`：内核每个回合比游戏少发 1 张
+    // [实测] 2026-09-06 `历史验证样本`：内核每个回合比游戏少发 1 张
     //（`~ 回合开始手牌张数 游戏=7 内核=6`，把王室认证的保留建好之后还差这一张）。
     // 补上之后 5 + 1(本条) + 摆动球那一张 = 7，和观测对上。
     //
@@ -2042,7 +2042,7 @@ pub static POWERS: &[PowerDef] = &[
     },
     // 逃脱大师：[源码] `EscapeArtistPower.AfterSideTurnEnd` —— 敌人回合结束减 1，
     // **减到 1 就停**（`if (Amount > 1)`）。它自己只是个计时器，
-    // 真正的逃跑写在出招表里；建它是为了让那一列进对拍。
+    // 真正的逃跑写在出招表里；建它是为了让那一列进校验。
     PowerDef {
         st: St::EscapeArtist,
         hook: Hook::EnemyTurnEnd,
@@ -2271,7 +2271,7 @@ pub static POWERS: &[PowerDef] = &[
     // ---- 战斗胜利结算。两条规则，**顺序由钩子定，不由表里的先后定** ----
     // 带骨肉先（Early）、燃烧之血后 —— [源码] 的 `AfterCombatVictoryEarly`
     // 早于 `AfterCombatVictory`。这不是可有可无的细节：50% 阈值要拿
-    // 结束那一刻的血量判，实录 act2_f31（36/80 → 54）判过。
+    // 结束那一刻的血量判，实录 历史验证样本（36/80 → 54）判过。
     PowerDef {
         st: St::MeatOnTheBone,
         hook: Hook::CombatVictoryEarly,
@@ -2294,7 +2294,7 @@ pub static POWERS: &[PowerDef] = &[
     // 对可观测的量完全等价（和轰鸣同一处降维手法）。
     //
     // **只建层数这一半，伤害那一半故意不建。**
-    // 污染的作用是「我挨的每一次攻击 +层数」，而默认对拍路径上敌人伤害是
+    // 污染的作用是「我挨的每一次攻击 +层数」，而默认校验路径上敌人伤害是
     // **注入观测到的意图标签**的，标签**已经含了污染**（实测：打出一张技能后
     // 标签当场 15 -> 17）。再在内核里加一次就是重复计数 —— 和古茶具那 2 点
     // 能量、薪火之源那 1 点能量是同一个坑。理由和后果写在 `St::Tainted`。
@@ -2392,11 +2392,11 @@ pub static POWERS: &[PowerDef] = &[
             // [源码] `PlatingPower.AfterSideTurnStart` 一个条件管两边 ——
             // `(Owner.Player == null || Owner.Player.PlayerCombatState.TurnNumber != 1)
             //  && (Owner.Side != Enemy || combatState.RoundNumber != 1)`。
-            // 敌人那半 2026-08-30 就照抄了，**玩家这半漏了**，而它在对拍路径上
-            // 结构性地看不见：`sync` 每帧把 `PLATING_POWER` 从观测重灌，
+            // 敌人那半 2026-08-30 就照抄了，**玩家这半漏了**，而它在校验路径上
+            // 结构性地看不见：`状态导入` 每帧把 `PLATING_POWER` 从观测重灌，
             // 内核第 1 回合多掉的那一层当帧就被冲掉。
-            // [实测] 2026-09-09 `bin/synth_audit` 在 14 条带护喉甲的语料上逐条报出来：
-            // 第 0 帧游戏 4、内核 3；`act2_f28_decimillipede` 逐回合 4/9/8/7/6/5/4/3
+            // [实测] 2026-09-09 验证数据 在 14 条带护喉甲的语料上逐条报出来：
+            // 第 0 帧游戏 4、内核 3；`历史验证样本` 逐回合 4/9/8/7/6/5/4/3
             // （第 2 回合那个 9 是 4+6 的岩石铠甲减 1）—— 掉层是从第 2 回合开始的。
             TOp::If {
                 cond: TCond::OwnerIsPlayer,
@@ -2454,7 +2454,7 @@ pub static POWERS: &[PowerDef] = &[
     // [实测] 2026-09-05 两份实录逐帧对上这条时序：
     // 液化地面挂 4 层的那个敌人回合**自己不减**（power 是在那一手里才挂上的），
     // 之后每个敌人回合减 1 ——
-    // 驱动语料 `act2_f33_boss_crusher`：r2=4 r3=3 r4=2（打了狂乱逃离 ->3）
+    // 驱动语料 `历史验证样本`：r2=4 r3=3 r4=2（打了狂乱逃离 ->3）
     // r5=2（再打一张 ->3）r6=2 r7=1，第 8 个敌人回合归零暴毙。
     //
     // **玩家回合开始时看到 1，就意味着这一回合不打狂乱逃离就会死** ——
@@ -2523,7 +2523,7 @@ pub static POWERS: &[PowerDef] = &[
     //   · **每一段攻击各一次**：`AfterDamageReceived` 逐段调用，多段牌付几倍的晕眩
     //   · **不看打没打穿**：门里没有 `UnblockedDamage`
     //   · **只认攻击**：药水 / 遗物 / 荆棘 / 能力牌的伤害是 `Unpowered`，不塞。
-    //     [实测] 2026-08-22 `act2_f27_elite_entomancer`（蜂房 1 层）：BASH / ULTIMATE_STRIKE /
+    //     [实测] 2026-08-22 `历史验证样本`（蜂房 1 层）：BASH / ULTIMATE_STRIKE /
     //     HEMOKINESIS / POMMEL_STRIKE / MOLTEN_FIST 各让抽牌堆多 1 张晕眩；
     //     FIRE_POTION（20 点）和 OROBIC_ACID 一张都没塞
     //
@@ -2692,7 +2692,7 @@ pub static POWERS: &[PowerDef] = &[
     //
     // **阶段判据用最大生命，不用私有计数器**：三个形态是 100/200/300，
     // 而最大生命是**观测量**、每帧同步进来 —— 复苏一次它自己就变了。
-    // 拿它判阶段，从战斗中途 `sync` 接进来也不会错相。
+    // 拿它判阶段，从战斗中途 `状态导入` 接进来也不会错相。
     //
     // **`ClearOwnerStatusesExcept` 那一条是这只 Boss 的要害**：
     // 死亡剥离连激怒和攒下来的力量一起清掉（[源码] 那个虚方法默认 true，
@@ -2703,7 +2703,7 @@ pub static POWERS: &[PowerDef] = &[
     // **一处刻意的时序简化**：游戏里回血发生在它自己回合的「复苏」那一手，
     // 内核在**死亡当帧**就回满（否则 0 血 = 死，`enemy_turn` 会跳过它、
     // 复苏那一手永远轮不到）。对求解器没有影响（复苏那一手本来就不打人），
-    // 但对拍时"我砍死它的那一帧"内核会比游戏早一步显示新形态的血量。
+    // 但校验时"我砍死它的那一帧"内核会比游戏早一步显示新形态的血量。
     PowerDef {
         st: St::Adaptable,
         hook: Hook::EnemyDied,
@@ -2820,7 +2820,7 @@ pub static POWERS: &[PowerDef] = &[
     // 我给它上的易伤/虚弱**会**被剥掉，和源码一致。
     //
     // **`[源码]`：没有任何一条实录碰过复活这一段** —— 唯一那场实录里
-    // 幻象活到最后（1 血），本体先死。第一次真砍死它的时候对拍才会判这条。
+    // 幻象活到最后（1 血），本体先死。第一次真砍死它的时候校验才会判这条。
     PowerDef {
         st: St::Illusion,
         hook: Hook::EnemyDied,
@@ -2857,7 +2857,7 @@ pub static POWERS: &[PowerDef] = &[
     // `if (!AreAllOtherSegmentsDead())` 在内核里恒真 —— 能走到回血那一步，战斗就还没结束。
     //
     // **死亡剥离连力量一起清**（那个虚方法默认 true，只有接续自己重写成 false）。
-    // [实测] `act2_f28_decimillipede`：节 1 死前缠绕的标签是 `Attack:10`（8 + 力量 2），
+    // [实测] `历史验证样本`：节 1 死前缠绕的标签是 `Attack:10`（8 + 力量 2），
     // 接续回来之后第一手缠绕是 `Attack:8`。
     //
     // [实测] 同一份实录两次复活，时序逐帧对上：第 3 回合砍死 -> 第 4 回合观测里没有 ->
@@ -2877,7 +2877,7 @@ pub static POWERS: &[PowerDef] = &[
     // **回血在回合开始、不在它那一手里**，和适生力 / 幻象同一个简化：死人不出手，
     // 要等它活过来这一手才轮得到。`DEAD_MOVE` 那一个敌人回合就是倒计时从 2 数到 1。
     //
-    // **强制换招放在复活这一刻，不放在死亡那一刻**（幻象是后者）：对拍路径上尸体的
+    // **强制换招放在复活这一刻，不放在死亡那一刻**（幻象是后者）：校验路径上尸体的
     // `EnemyDef` 是 UNKNOWN、出招指针也没对齐，死的时候定下的指针传不到这里；
     // 复活这一刻由规则自己定，两条路就都对。
     // **紧跟着清掉 `MoveForcedThisTurn`**：那个标记的意思是"同步那一刻观测到的意图过期了"，
@@ -2981,7 +2981,7 @@ pub static POWERS: &[PowerDef] = &[
     // [源码] `PaperCutsPower.AfterDamageGiven`：`dealer == Owner && target.IsPlayer
     // && props.IsPoweredAttack() && result.UnblockedDamage > 0` ->
     // `CreatureCmd.LoseMaxHp(target, Amount)`。四卷咀嚼 5×2 全打穿就是一回合 −16 上限，
-    // **而且带出这场仗** —— 整幕链会把它传给下一场（`synth::act`）。
+    // **而且带出这场仗** —— 整幕链会把它传给下一场（战斗构造层）。
     PowerDef {
         st: St::PaperCuts,
         hook: Hook::AttackUnblocked,
@@ -3225,7 +3225,7 @@ pub static POWERS: &[PowerDef] = &[
     //   2. 判 `<= 0` 而不是 `== 0`
     //   3. 塞的是**手牌**（剧烈增强塞的是弃牌堆，两条别搞混）
     //
-    // 层数是观测量（游戏面板上那个数），所以它同时进了 `replay::ALL_ST` ——
+    // 层数是观测量（游戏面板上那个数），所以它同时进了 状态导入层 ——
     // 那一列守着"每打一张牌该减 1"这一半，`AddCardToHand` 守着另一半。
     PowerDef {
         st: St::WitheringPresence,
@@ -3249,7 +3249,7 @@ pub static POWERS: &[PowerDef] = &[
 ///
 /// `fire_ctx` 原来每次点火都把整张表扫一遍、逐条比 `def.hook`，而点火是全内核最密的调用之一
 /// （每打一张牌至少 `PlayerSkill`/`PlayerAttack` + `CardPlayed`，每一段伤害一次 `EnemyAttacked`/`EnemyDamaged`）。
-/// 2026-09-25 加了 11 条遗物规则，`bin/bench` 单线程当场掉了约 5.5% —— 条数只涨了一成，
+/// 2026-09-25 加了 11 条遗物规则，验证数据 单线程当场掉了约 5.5% —— 条数只涨了一成，
 /// 掉的主要是那一成比较落在了每一次点火上。design-l1 早就写着「要优化的话第一步是按 hook 分组」。
 ///
 /// # 等价性
@@ -3376,11 +3376,11 @@ pub static GEN_POOL: &[u16] = &[
 /// **不追求和游戏的随机序列一致，也做不到。** 游戏用的是
 /// `System.Random(seed + hash(流名))` 外加一个存进存档的 `Counter`，
 /// 而 `System.Random` 的算法在 .NET 版本之间换过实现；再加上 `Counter`
-/// 是观测里没有的运行时状态。仓库本来就承认「抽牌/洗牌结构性不可对拍」，
+/// 是观测里没有的运行时状态。仓库本来就承认「抽牌/洗牌结构性不可校验」，
 /// 生成牌是同一类东西。
 ///
-/// 这不影响对拍：`replay::sync` 每帧用观测覆盖手牌，游戏生成了什么就是什么。
-/// 它只影响 L2 的前向推演，而那本来就是**一个样本**（`Line::drew` 会标出来）。
+/// 这不影响校验：状态导入层 每帧用观测覆盖手牌，游戏生成了什么就是什么。
+/// 它只影响 搜索层的前向推演，而那本来就是**一个样本**（`Line::drew` 会标出来）。
 /// 从生成池里随机取一张**指定类型**的牌。
 ///
 /// `GEN_POOL` 是真实生成池（[源码] `FilterForCombat` 算出来 81 张）与内核
@@ -3515,7 +3515,7 @@ pub static RULE_MODIFIERS: &[St] = &[
 ///
 /// 它们不是触发器（`POWERS` 里没有它们的规则），消费点全在
 /// [`crate::damage`] 的 `apply_modifiers` / `card_block` 和 `step.rs` 里
-/// 那几个窄 `if`。伤害管线的顺序在 `docs/design-l1.md` 里，**改数字先去看那张表**。
+/// 那几个窄 `if`。伤害管线的顺序在 验证数据 里，**改数字先去看那张表**。
 ///
 /// 这张表和 `RULE_MODIFIERS` 一样**不带行为**，作用是让这个类别可枚举 ——
 /// `no_status_handed_out_by_a_relic_or_an_enemy_is_a_dud` 靠它区分
@@ -3534,7 +3534,7 @@ pub static PIPELINE_STATUSES: &[St] = &[
     St::Surrounded,    // 遭到包围：背后打来的 ×1.5
     St::BackAttackLeft,  // 敌人在我的哪一侧
     St::BackAttackRight,
-    St::FacingRight,   // 我朝哪边（内核私有，游戏不报，`replay::infer_facing` 反推）
+    St::FacingRight,   // 我朝哪边（内核私有，游戏不报，状态导入层 反推）
     St::Flutter,       // 振翅
     St::Soar,          // 翱翔
     St::Tainted,       // 污染
@@ -3611,7 +3611,7 @@ pub static HAND_END: &[HandEndDef] = &[
     // [源码] `Beckon.OnTurnEndInHand` 是 `CreatureCmd.Damage(6, Unblockable |
     // Unpowered | Move)`，而 `Burn.OnTurnEndInHand` 那一句**没有 `Unblockable`**。
     // 所以灼伤走 `Op::TakeDamage`（格挡吃得掉），呼唤走 `Op::LoseHp`（吃不掉）。
-    // [实测] 2026-09-09 `act1_f17_boss_soul_fysh` 帧11：身上 8 点格挡，
+    // [实测] 2026-09-09 `历史验证样本` 帧11：身上 8 点格挡，
     // 游戏照样掉 6 血 —— 第一版写成 `TakeDamage` 当场红一帧。
     HandEndDef { card: card::BECKON, ops: &[Op::LoseHp(6)], void: false },
     // 感染 —— 同形状，3 点
@@ -3640,7 +3640,7 @@ pub static HAND_END: &[HandEndDef] = &[
     //
     // **这个 3 是基础值，实际伤害是 `3 + CardInst::bonus`**：永世沙漏的
     // 剧烈增强会把每一张凋萎 `FakeUpgrade()`（各 +3），游戏把层数写进牌名
-    // （`凋萎+1` / `凋萎+2`），`replay::lookup_card` 解析它并灌进 `bonus`。
+    // （`凋萎+1` / `凋萎+2`），状态导入层 解析它并灌进 `bonus`。
     // 表里其它几张 `TakeDamage` 的状态牌 bonus 恒为 0，不受影响。
     HandEndDef { card: card::WITHER, ops: &[Op::TakeDamage(3)], void: false },
     HandEndDef { card: card::DAZED, ops: &[], void: true },
@@ -3650,7 +3650,7 @@ pub static HAND_END: &[HandEndDef] = &[
 // ---------------- 遗物 ----------------
 //
 // **这张表只放"内核对它有话可说"的遗物**，不是 55 个全灌。
-// 权威全表在 `traces/relics_catalog.json`（`tools/dump_relics.py` 导出，
+// 权威全表在 `traces/relics_catalog.json`（验证数据 导出，
 // 55/55 全部拿到），要建模时从那里抄，不用再联网。
 //
 // 为什么不全灌：上一次一次性灌 54 张牌，结果本文档自己写着
@@ -3658,7 +3658,7 @@ pub static HAND_END: &[HandEndDef] = &[
 // 遗物按"这一局身上有的 + 以后真遇到的"增量加。
 //
 // 表里没有的遗物**不会被当成没效果** —— `--live` 会拿观测里的名字把它们
-// 点名报出来（见 `bin/solve.rs`）。内核必须能说出"我不认识这个"。
+// 点名报出来（见 验证数据）。内核必须能说出"我不认识这个"。
 
 pub static RELICS: &[RelicDef] = &[
     RelicDef {
@@ -4005,7 +4005,7 @@ pub static RELICS: &[RelicDef] = &[
         note: "[源码+实测] 血量≤50% 时 +3 力量；回血越过阈值时移除。观测力量已含加成",
     },
     // ---- 2026-09-09 第三批：新一局第 1 幕捡到的六件 ----
-    // 三件局外（战斗层不欠它们什么），两件战斗层，一件只在合成路径上欠。
+    // 三件局外（战斗层不欠它们什么），两件战斗层，一件只在战斗构造路径上欠。
     RelicDef {
         id: "LEAFY_POULTICE", name: "叶子药膏",
         start_status: &[], private_status: &[], counter_to: None, modelled: true,
@@ -4038,14 +4038,14 @@ pub static RELICS: &[RelicDef] = &[
         note: "第 2 回合开始获得 14 点格挡。层数=格挡，规则在 POWERS 的 TurnStart + TurnIs(2)",
     },
     // 碎石者：[源码] `StoneCracker.AfterRoomEntered(CombatRoom)` ——
-    // 从**抽牌堆**随机挑 2 张可升级的牌升级。和风箱同类：对拍路径上牌是观测量
-    // （`sync` 照抄升级态），**合成路径没有观测可抄** ⇒ `SYNTH_ONLY_GAPS`。
+    // 从**抽牌堆**随机挑 2 张可升级的牌升级。和风箱同类：校验路径上牌是观测量
+    // （`状态导入` 照抄升级态），**战斗构造路径没有观测可抄** ⇒ `SYNTH_ONLY_GAPS`。
     RelicDef {
         id: "STONE_CRACKER", name: "碎石者",
         start_status: &[], private_status: &[(St::StoneCracker, 1)],
         counter_to: None, modelled: true,
         note: "[源码] AfterRoomEntered(CombatRoom)：抽牌堆里随机 2 张可升级的牌升级。
-               规则在 POWERS 的 TurnStart；对拍路径上牌是观测量，那边不挂",
+               规则在 POWERS 的 TurnStart；状态导入路径上牌是观测量，那边不挂",
     },
     RelicDef {
         id: "REPTILE_TRINKET", name: "爬行动物饰品",
@@ -4088,10 +4088,10 @@ pub static RELICS: &[RelicDef] = &[
         start_status: &[], private_status: &[], counter_to: None, modelled: false,
         note: "本场第一次给负面状态时效果翻倍。欠「施加 status 时插一手」的钩子",
     },
-    // 古茶具 2026-09-09 建了。它欠的「上一个房间是不是休息处」**不在 L1 里，
-    // 但在 L3 手上** —— 整幕链自己知道在模拟哪个房间。所以规则进 `POWERS`，
-    // 武装那一步走 `REST_ARMED` + `synth::FightSpec::after_rest`。
-    // **对拍路径一个字节不变**：那边 `energy` 从观测灌，这个 status 不挂。
+    // 古茶具 2026-09-09 建了。它欠的「上一个房间是不是休息处」**不在 core 里，
+    // 但在评估层 手上** —— 整幕链自己知道在模拟哪个房间。所以规则进 `POWERS`，
+    // 武装那一步走 `REST_ARMED` + 战斗构造层。
+    // **校验路径一个字节不变**：那边 `energy` 从观测灌，这个 status 不挂。
     RelicDef {
         id: "VENERABLE_TEA_SET", name: "古茶具套装",
         start_status: &[], private_status: &[], counter_to: None, modelled: true,
@@ -4130,7 +4130,7 @@ pub static RELICS: &[RelicDef] = &[
         note: "本场第一次掉血抽 3 张。一次性靠规则里的 ClearSelf",
     },
     // ---- 战斗层，但**还没建模**。每条写明卡在哪 ----
-    // [实测] act2_f31 帧1：防御+（基础 8）给出 16。
+    // [实测] 历史验证样本 帧1：防御+（基础 8）给出 16。
     // 充能放在 `St::VambraceCharge`，`damage::card_block` 里消耗 —— 那是
     // 「从卡牌获得格挡」的唯一入口，所以药水/能力牌的格挡自动不吃翻倍。
     RelicDef {
@@ -4141,11 +4141,11 @@ pub static RELICS: &[RelicDef] = &[
         modelled: true,
         note: "首次从卡牌获得的格挡翻倍。**和脆弱的先后顺序未实测**，取了不高估玩家的那边",
     },
-    // [实测] act1_f14_new_sixth 帧1：熔融之拳+ 打死闪光贾克斯果之后，
+    // [实测] 历史验证样本 帧1：熔融之拳+ 打死闪光贾克斯果之后，
     // 能量 0 -> 1、手牌 3 -> 4。补这件之前那一帧是个真 MISMATCH。
     RelicDef {
         id: "GREMLIN_HORN", name: "地精之角",
-        // 游戏不把它报成 status ⇒ 私有量，逐帧 carry，不进 ALL_ST
+        // 游戏不把它报成 status ⇒ 私有量，逐帧 carry，不进 外部状态字段集合
         start_status: &[], private_status: &[(St::GremlinHorn, 1)],
         counter_to: None, modelled: true,
         note: "敌人死亡时 +1 能量并抽 1 张牌。规则在 POWERS 的 Hook::EnemyDied",
@@ -4154,7 +4154,7 @@ pub static RELICS: &[RelicDef] = &[
     // 对场上**每一只**敌人（含刚被召唤出来的三只卵）。
     RelicDef {
         id: "MR_STRUGGLES", name: "抱抱先生",
-        // 游戏不把遗物报成 status ⇒ 私有量，逐帧 carry，不进 ALL_ST
+        // 游戏不把遗物报成 status ⇒ 私有量，逐帧 carry，不进 外部状态字段集合
         start_status: &[], private_status: &[(St::MrStruggles, 1)],
         counter_to: None, modelled: true,
         note: "回合开始对全体造成等于回合数的伤害。规则在 POWERS 的 Hook::TurnStart",
@@ -4172,7 +4172,7 @@ pub static RELICS: &[RelicDef] = &[
     },
     // ---- 战斗胜利结算（2026-08-20 建模）。规则在 `POWERS`，层数 = 回血量 ----
     //
-    // 「验证面为空」这条**已经不成立了**：战斗结束帧一直都录在 trace 里
+    // 「验证面为空」这条**已经不成立了**：战斗结束帧一直都录在 验证样本 里
     // （`state_type: "rewards"`），只是 `verify` 整帧跳过。改成只比血量之后，
     // 13 条实录里凡是录了 relics 的都能判它们。
     RelicDef {
@@ -4207,7 +4207,7 @@ pub static RELICS: &[RelicDef] = &[
         note: "第一回合+1能量。[源码] 是 TurnNumber <= 1，不是 == 1",
     },
     // 赤牛：每场战斗开始（[源码] 实为**第一回合开始**，`TurnNumber <= 1`）获得 8 活力。
-    // 私有量：游戏把活力报成 `VIGOR_POWER`（那个进 ALL_ST），但"赤牛给几点"
+    // 私有量：游戏把活力报成 `VIGOR_POWER`（那个进 外部状态字段集合），但"赤牛给几点"
     // 这个配置值游戏不报，和灯笼的 1 点能量同一类。
     RelicDef {
         id: "AKABEKO", name: "赤牛",
@@ -4243,10 +4243,10 @@ pub static RELICS: &[RelicDef] = &[
         note: "回合结束无格挡则+6。**两段式**：TurnEndVeryEarly 快照、TurnEnd 结算，因为覆甲在第二段给格挡",
     },
 
-    // ---- 战斗开始挂 status。**注意：这几件在对拍路径上收益为零** ----
+    // ---- 战斗开始挂 status。**注意：这几件在校验路径上收益为零** ----
     //
-    // 它们给的都是游戏**也会报**的量，`sync` 从观测抄过来就已经算对了。
-    // 建它们是为了内核**自己开一场仗**的时候（L3 推演、合成 trace）——
+    // 它们给的都是游戏**也会报**的量，`状态导入` 从观测抄过来就已经算对了。
+    // 建它们是为了内核**自己开一场仗**的时候（评估层 推演、合成 验证样本）——
     // 那时没有观测可抄。所以这一栏是 `start_status` 不是 `private_status`，
     // 而且 `relic_carry` **不会**碰它们（碰了就会把力量钉死，见 RelicDef 的注释）。
     RelicDef {
@@ -4291,13 +4291,13 @@ pub static RELICS: &[RelicDef] = &[
     // 乙、**被观测遮住**的三件：效果都发生在回合 1 开始，而内核的手牌和血量
     //     每帧从观测同步 —— 建了要么空转要么重复计数。
     //     这是古茶具那 2 点能量、薪火之源那 1 点能量踩过的同一个坑：
-    //     **`sync` 直接照抄观测的地方，不能再在内核里加一遍。**
+    //     **`状态导入` 直接照抄观测的地方，不能再在内核里加一遍。**
     RelicDef {
         id: "BELLOWS", name: "风箱",
         start_status: &[], private_status: &[(St::UpgradeOpeningHand, 1)],
         counter_to: None, modelled: true,
         note: "[源码] AfterPlayerTurnStart 且 TurnNumber<=1 升级手牌。规则在 POWERS 的 HandDrawn；
-               对拍路径上手牌是观测量（sync 照抄升级态），那边不挂这个 status",
+               状态导入路径上手牌是观测量（sync 照抄升级态），那边不挂这个 status",
     },
     RelicDef {
         id: "BONE_TEA", name: "骨茶",
@@ -4311,7 +4311,7 @@ pub static RELICS: &[RelicDef] = &[
         start_status: &[], private_status: &[(St::BloodVial, 2)],
         counter_to: None, modelled: true,
         note: "[源码] AfterPlayerTurnStartLate 且 TurnNumber<=1 回 2 血。规则在 POWERS；
-               对拍路径上血量是观测量（开局 66->68 已经含它），那边不挂",
+               状态导入路径上血量是观测量（开局 66->68 已经含它），那边不挂",
     },
     RelicDef {
         id: "PEAR", name: "梨子",
@@ -4323,7 +4323,7 @@ pub static RELICS: &[RelicDef] = &[
         start_status: &[], private_status: &[(St::JeweledMask, 1)],
         counter_to: None, modelled: true,
         note: "[源码] BeforeHandDraw 且 TurnNumber<=1：抽牌堆里随机一张能力牌进手牌 + SetToFreeThisTurn。
-               规则在 POWERS 的 TurnStart（抽牌之前）；对拍路径上手牌和费用是观测量，那边不挂",
+               规则在 POWERS 的 TurnStart（抽牌之前）；状态导入路径上手牌和费用是观测量，那边不挂",
     },
     RelicDef {
         id: "NEOWS_TORMENT", name: "涅奥的苦痛",
@@ -4337,15 +4337,15 @@ pub static RELICS: &[RelicDef] = &[
     },
     // ---- 2026-09-25 预先补的一批（还没有一件在身上出现过）。全部 [源码]，**未实测** ----
     //
-    // 两类：会让 L2 出非法线 / 明显错线的四件（颈圈 / 小提琴 / 头冠 / 水盆），
+    // 两类：会让 搜索层 出非法线 / 明显错线的四件（颈圈 / 小提琴 / 头冠 / 水盆），
     // 和形状跟现有遗物一样的八件。赝品复用正品的 status —— 两件同时在身上时相加，
-    // 和锚 + 锚？？？是同一个先例（`replay::push_carry`）。
+    // 和锚 + 锚？？？是同一个先例（状态导入层）。
     RelicDef {
         id: "VELVET_CHOKER", name: "天鹅绒颈圈",
         start_status: &[], private_status: &[(St::VelvetChoker, 6)],
         counter_to: None, modelled: true,
         note: "[源码] ShouldPlay：本回合打满 6 张就不能再出牌（自动打出的也拦）。和懒惰共用 `step::play_cap_reached`。
-               +1 能量是 ModifyMaxEnergy，对拍路径观测的 max_energy 已含；L3 在战斗外读不到能量上限，按 3 算（advise 会报）。
+               +1 能量是 ModifyMaxEnergy，状态导入路径观测的 max_energy 已含；外部调用方缺少能量上限时按 3 处理。
                面板计数器 = 本回合已出几张，`sync` 拿它覆盖单帧同步时不知道的 cards_played",
     },
     RelicDef {
@@ -4421,7 +4421,7 @@ pub static RELICS: &[RelicDef] = &[
 
 /// 这个**遗物私有量**是不是「一场只用得掉一次」的。
 ///
-/// `Replayer::sync` 从战斗**中途**接进来时要用它：那时前面发生过什么不可知，
+/// 状态导入层 从战斗**中途**接进来时要用它：那时前面发生过什么不可知，
 /// 一场只用一次的量要当成**已经用掉**（低估自己），
 /// 而"我身上有这件遗物"这种常数标记任何时候恢复都对。
 ///
@@ -4470,15 +4470,15 @@ pub fn relic_by_id(id: &str) -> Option<&'static RelicDef> {
     RELICS.iter().find(|r| r.id == id)
 }
 
-/// **只在合成路径上欠账的遗物** —— `RelicDef::modelled` 那一列照不到的那批。
+/// **只在战斗构造路径上欠账的遗物** —— `RelicDef::modelled` 那一列照不到的那批。
 ///
 /// # 两条路，两个覆盖率
 ///
-/// `modelled` 问的是「**对拍**路径上够不够」。那条路上手牌、血量、药水槽
-/// 全是**观测量**：`sync` 每帧照抄，内核再建一遍就是重复计数
+/// `modelled` 问的是「**校验**路径上够不够」。那条路上手牌、血量、药水槽
+/// 全是**观测量**：`状态导入` 每帧照抄，内核再建一遍就是重复计数
 /// （风箱和小血瓶的 `note` 里写着这件事，都是踩过的）。
 ///
-/// **L3 走的是另一条路。** `synth::build` 凭牌组和遗物**搭**一场仗 ——
+/// **评估层 走的是另一条路。** 战斗构造层 凭牌组和遗物**搭**一场仗 ——
 /// 没有观测可抄，于是这批"靠观测兜底"的遗物在那条路上**一件都不生效**。
 /// 两个覆盖率因此是两个数，这张表就是差集。
 ///
@@ -4486,15 +4486,15 @@ pub fn relic_by_id(id: &str) -> Option<&'static RelicDef> {
 ///
 /// 判据统一：**效果发生在开战那一刻、或者依赖 `FightSpec` 装不下的局外状态**。
 /// 纯局外的那些（磨刀石升级两张牌、梨子 +10 最大生命）**不在这里** ——
-/// 它们的产物已经在 L3 的输入里（牌组、最大生命），构造器不欠它们什么。
+/// 它们的产物已经在评估层的输入里（牌组、最大生命），构造器不欠它们什么。
 ///
-/// 消费者是 `synth::build`（报成 `synth::Gap::SynthUnmodelledRelic`）。
+/// 消费者是 战斗构造层（报成 战斗构造层）。
 /// `synth_only_gaps_name_real_relics` 守着这里的 id 都真在 `RELICS` 里 ——
 /// 打错一个字的后果是这条**永远不会被报出来**，而那正是这张表要防的东西。
 pub static SYNTH_ONLY_GAPS: &[(&str, &str)] = &[
     // **开局塞药水那两件**：药水不是 status，`begin_combat` 里没有它的位置，
     // 而 `FightSpec::potions` 是调用方给的一份**战前**清单 —— 那瓶石头是
-    // 开战那一刻才拿到的。要建得先决定「L3 的药水账本长什么样」，
+    // 开战那一刻才拿到的。要建得先决定「评估层的药水账本长什么样」，
     // 那是阶段 2/3 的事。
     ("PETRIFIED_TOAD", "开局塞一瓶药水形状的石头"),
     ("DELICATE_FROND", "开局把空药水栏填满"),
@@ -4502,12 +4502,12 @@ pub static SYNTH_ONLY_GAPS: &[(&str, &str)] = &[
     // 内核不该猜，调用方走 `FightSpec::start_status` 传进来。
     ("GIRYA", "开局给力量（换过几次是局外状态，走 FightSpec::start_status）"),
     // 皮草大衣：拾起时**在地图上标记 7 场仗**，那几场的敌人只有 1 血。
-    // 「哪几场」是路线信息，L3 的整幕链要自己记（阶段 3）。
+    // 「哪几场」是路线信息，评估层的整幕链要自己记（阶段 3）。
     ("FUR_COAT", "标记过的 7 场仗里敌人只有 1 血（哪几场是局外状态）"),
 ];
 
-/// 这件遗物在**合成路径**上欠什么。`None` = 不欠（或者本来就 `modelled: false`，
-/// 那条走 `synth::Gap::UnmodelledRelic`）。
+/// 这件遗物在**战斗构造路径**上欠什么。`None` = 不欠（或者本来就 `modelled: false`，
+/// 那条走 战斗构造层）。
 pub fn synth_gap(id: &str) -> Option<&'static str> {
     SYNTH_ONLY_GAPS.iter().find(|(k, _)| *k == id).map(|(_, why)| *why)
 }
@@ -4516,14 +4516,14 @@ pub fn synth_gap(id: &str) -> Option<&'static str> {
 ///
 /// # 为什么不能进 `RelicDef::private_status`
 ///
-/// 那一栏是**无条件**挂的（`grant_relics` 和 `replay::sync` 都照挂），而这几件
+/// 那一栏是**无条件**挂的（`grant_relics` 和 状态导入层 都照挂），而这几件
 /// 的条件在**战斗观测里根本没有**：上一个房间是不是休息处、骨茶还剩几场、
 /// 这一场是不是 Boss。挂成无条件就是"每一场都当作刚休息过"，凭空多 2 点能量。
 ///
 /// 两条路的处置不同，各自都对：
-/// * **合成路径**：调用方知道自己在模拟哪个房间（`synth::FightSpec`），照这张表武装
-/// * **对拍路径**：那几个量（能量、手牌升级态、血量）**本来就在观测里**，
-///   `sync` 直接照抄 ⇒ **一条都不挂**
+/// * **战斗构造路径**：调用方知道自己在模拟哪个房间（战斗构造层），照这张表武装
+/// * **校验路径**：那几个量（能量、手牌升级态、血量）**本来就在观测里**，
+///   `状态导入` 直接照抄 ⇒ **一条都不挂**
 ///
 /// `conditional_start_names_resolve` 守着这里的 id 都真在 `RELICS` 里。
 pub static CONDITIONAL_START: &[(&str, Arm, St, i32)] = &[
@@ -4574,7 +4574,7 @@ pub static ENCHANTS: &[EnchantDef] = &[
         keywords: 0, modelled: true, note: "",
     },
     // [源码] `RoyallyApproved.OnEnchant` 加 `Innate` + `Retain`，没有任何数值钩子。
-    // [实测] 2026-09-06 `act3_f46_elite_soul_nexus` 两个回合边界：均衡+ 留在手上、
+    // [实测] 2026-09-06 `历史验证样本` 两个回合边界：均衡+ 留在手上、
     // 同一手的邻座（添柴+）被弃掉。王室印章给的就是这个。
     EnchantDef {
         id: "ROYALLY_APPROVED", name: "王室认证",
@@ -4803,7 +4803,7 @@ pub mod enemy {
     pub const DUMMY: u16 = 0;
     pub const EXOSKELETON: u16 = 1;
     pub const TEST_SUBJECT: u16 = 2;
-    /// 占位：什么都不做的敌人。对拍时**一律**用它，因为敌人 AI 本来就在
+    /// 占位：什么都不做的敌人。校验时**一律**用它，因为敌人 AI 本来就在
     /// 「故意没做」清单里，让内核的循环出招参与验证只会制造假阳性。
     /// 敌人的真实行动由观测反推，不由内核预测。
     pub const UNKNOWN: u16 = 3;
@@ -4813,7 +4813,7 @@ pub mod enemy {
     /// 旧日雕像（第1幕精英）。**唯一一个自带缓慢的已知敌人**，
     /// `St::SlowSource` 这条规则就是靠它取的数。
     pub const BYGONE_EFFIGY: u16 = 5;
-    // 以下由 `tools/enemy_report.py` 从实录 trace 聚合而来，
+    // 以下由 验证数据 从实录 验证样本 聚合而来，
     // 汇总见 `traces/enemies_observed.json`。读表前先看下面那段说明。
     pub const SHRINK_BEETLE: u16 = 6;
     pub const PILLAR_CONSTRUCT: u16 = 7;
@@ -5005,7 +5005,7 @@ pub mod enemy {
 // ===========================================================================
 //
 // 数值来源分三档，**每条都标出来**，因为可信度差很远：
-//   [实测]  实录 trace 量出来的，最可信
+//   [实测]  实录 验证样本 量出来的，最可信
 //   [wiki]  sts2.wiki 扒的（`traces/enemies_wiki.json`），是假设不是事实
 //   [合成]  我为测试造的假敌人，游戏里不存在
 //
@@ -5144,7 +5144,7 @@ const MAWLER_RAND: Next = Next::Rand(&[
 /// 会互相盖住」），所以这里按**集合**建：开局允许 {快斩, 战舞}。
 /// 这不是把"确定的事"当成随机 —— 它陈述的是"这两手都可能"，
 /// 而那正是 `allowed_initial` / `--predict-enemy` 消费的那个口径。
-/// [实测] 2026-09-09 `act1_f17_boss` 第 0 帧一只信徒摆的正是 Buff。
+/// [实测] 2026-09-09 `历史验证样本` 第 0 帧一只信徒摆的正是 Buff。
 static M_KIN_FOLLOWER: Machine = Machine {
     start: Next::Rand(&[
         Branch { to: 0, weight: 1, repeat: Repeat::Forever, cooldown: 0 },
@@ -5242,15 +5242,15 @@ static M_CHOMPER: Machine = Machine {
 /// 单看一节三手都可能（`allowed_initial` 三手全开）；合成一场仗时按槽位错开
 /// （`initial_move` 取 `num = 0`：扭动 / 壮硕 / 缠绕）。槽位 0/1/2 = Front/Middle/Back，
 /// 是遭遇表的出场顺序，也是观测里的顺序。
-/// [实测] 两条实录的开局都是这个方向的轮换：`act2_f28` 壮硕/缠绕/扭动（`num = 1`）·
-/// `act2_f30` 扭动/壮硕/缠绕（`num = 0`）；反方向（`num / num+2 / num+1`）两条都对不上。
-/// 在这之前是等权 `Rand`，`initial_move` 取最低位 ⇒ 合成路径上三节全从扭动起、整场同相。
-/// **没用 `SlotIs`（咬人卷轴那个写法）**：它会让 `act2_f28` 三节在 `synth_audit` 的开局第一手全报集合外。
+/// [实测] 两条实录的开局都是这个方向的轮换：`历史验证样本` 壮硕/缠绕/扭动（`num = 1`）·
+/// `历史验证样本` 扭动/壮硕/缠绕（`num = 0`）；反方向（`num / num+2 / num+1`）两条都对不上。
+/// 在这之前是等权 `Rand`，`initial_move` 取最低位 ⇒ 战斗构造路径上三节全从扭动起、整场同相。
+/// **没用 `SlotIs`（咬人卷轴那个写法）**：它会让 `历史验证样本` 三节在 `synth_audit` 的开局第一手全报集合外。
 ///
 /// **死了之后**（2026-09-14 建，见 `St::Reattach`）：[源码] `DEAD_MOVE` -> `REATTACH_MOVE`
 /// -> 等权随机三选一（`CannotRepeat`）-> 回到上面的循环。`DEAD_MOVE` 内核不建成一手：
 /// 死人不出手，那一个敌人回合由 `St::ReattachDue` 的倒计时数掉。
-/// [实测] `act2_f28_decimillipede` 两次复活之后的第一手分别是缠绕和壮硕，之后照循环走。
+/// [实测] `历史验证样本` 两次复活之后的第一手分别是缠绕和壮硕，之后照循环走。
 static M_DECIMILLIPEDE: Machine = Machine {
     start: Next::Cond(&[
         (ECond::SlotRep(0), 0),
@@ -5414,10 +5414,10 @@ static M_NIBBIT: Machine = Machine {
 /// 前面的 `Unknown` 会先把 0/1 收进集合，2 那一支就永远混在里面。
 ///
 /// **一处已知的弱点**：`pick_next` 对 `Next::Cond` 取的是集合里**最小**的下标
-///（`trailing_zeros`），所以 rollout 里组装师造得动时永远走 FABRICATE、
+///（`trailing_zeros`），所以 推演层 里组装师造得动时永远走 FABRICATE、
 /// 一次都不会采样到 FABRICATING_STRIKE（那一手还带 18 点伤害）。
-/// **rollout 因此低估这只怪**。对拍和 L2 都不受影响（前者注入观测、
-/// 后者用观测意图当威胁），而 rollout 的策略面本来就在"很弱"那一档。
+/// **推演层 因此低估这只怪**。外部校验层和搜索层 都不受影响（前者注入观测、
+/// 后者用观测意图当威胁），而 推演层的策略面本来就在"很弱"那一档。
 static M_FABRICATOR: Machine = Machine {
     start: Next::Cond(&[
         (ECond::AlliesAliveAtLeast(4), 2),
@@ -5609,7 +5609,7 @@ static M_EXOSKELETON: Machine = Machine {
 /// 两者之间蜂房的层数没有任何东西会改（只有喷射信息素自己加它）。
 ///
 /// 两手的意图签名逐字相同（`Buff`），实况对齐靠 `step::move_reachable_now` 挑出
-/// 「当前层数下走得到的那一手」，见 `Replayer::identify_enemies`。
+/// 「当前层数下走得到的那一手」，见 状态导入层。
 static M_ENTOMANCER: Machine = Machine {
     start: Next::Go(0),
     after: &[
@@ -5865,7 +5865,7 @@ static M_INSATIABLE: Machine = Machine {
 /// 活体盾 [源码] `LivingShield.GenerateMoveStateMachine`：
 /// 起手固定盾牌猛击(0)；之后看是否有队友存活：有队友则继续盾牌猛击(0)，独活则进入猛砸(1)并无限循环。
 ///
-/// **条件用 `ECond::Unknown` 留空**：队友数在单怪沙盒对拍里判不准，
+/// **条件用 `ECond::Unknown` 留空**：队友数在单怪沙盒校验里判不准，
 /// 退化为允许集合包含 `{盾牌猛击, 猛砸}`。
 static M_LIVING_SHIELD: Machine = Machine {
     start: Next::Go(0),
@@ -5956,7 +5956,7 @@ static M_TUNNELER: Machine = Machine {
 /// * **出手顺序**：槽位小的先出手。`num = 0` 时第 1 回合总是先大啃后咀嚼
 ///   （真实分布里是 2/3）。纸伤难愈按**打穿的段数**算，格挡够挡一部分时
 ///   先挨大啃会多被打穿几段 ⇒ 这条近似**偏悲观**
-/// * `bin/synth_audit` 的「开局第一手」拿它当允许集合 —— 真实录像上约 2/3 会报集合外。
+/// * 验证数据 的「开局第一手」拿它当允许集合 —— 真实录像上约 2/3 会报集合外。
 ///   那是这条近似的代价，不是规则错
 static M_SCROLL_OF_BITING: Machine = Machine {
     start: Next::Cond(&[
@@ -6030,7 +6030,7 @@ pub static ENEMIES: &[EnemyDef] = &[
         name: "<合成:激怒2>", max_hp: 100, start_status: &[(St::Rage, 2)], loop_from: 0, machine: None,
         moves: &[EnemyMove { name: "攻势", intent: "Attack", ops: &[EOp::Attack { base: 15, hits: 1 }] }],
     },
-    // 3 对拍占位，见 enemy::UNKNOWN
+    // 3 校验占位，见 enemy::UNKNOWN
     EnemyDef {
         name: "<未知敌人>", max_hp: 0, start_status: &[], loop_from: 0, machine: None,
         moves: &[EnemyMove { name: "无", intent: "", ops: &[EOp::Nothing] }],
@@ -6204,7 +6204,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // **「是复活还是雾菇重新召唤」这个欠定 2026-09-06 结掉了**，两半证据：
     //   [源码] `IllusionPower.AfterDeath` -> `SetMoveImmediate(REVIVE_MOVE)` -> 回满
-    //   [实测] `act1_f15_ninth` 帧5 闪电霹雳+ 打死它（帧6/7 观测里**整只消失**），
+    //   [实测] `历史验证样本` 帧5 闪电霹雳+ 打死它（帧6/7 观测里**整只消失**），
     //          帧8 它以 6/6 带着两个 power 回来 —— 而雾菇**那两个回合的意图是
     //          `Attack:8, Buff:` 和 `Attack:15`，都不是 Summon**。
     //          没有第二次召唤，所以只能是它自己复活的。
@@ -6236,7 +6236,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 两个信徒同场时**起手位置不同**（实录里一个先 Buff 一个先攻击）——
     // [源码] `TheKinBoss` 里第一只 `StartsWithDance = true`。
     // 2026-09-09 补了机器（起手按集合建，见 `M_KIN_FOLLOWER`）；
-    // 在那之前内核每只都从第 0 手开始，`bin/synth_audit` 的开局第一手那一栏
+    // 在那之前内核每只都从第 0 手开始，验证数据 的开局第一手那一栏
     // 把它报成**唯一一例「落在允许集合外」**。
     EnemyDef {
         name: "同族信徒", max_hp: 59, start_status: &[(St::Minion, 1)], loop_from: 0,
@@ -6258,7 +6258,7 @@ pub static ENEMIES: &[EnemyDef] = &[
             // 1 = 晕眩（[源码] `DIZZY_MOVE`，`StunIntent`）。这一手什么都不做，
             // 并清掉失衡标记（源码 `DizzyMove` 里 `IsOffBalance = false`）。
             // **intent 字符串没实测过** —— 从没见过它晕，因为内核原来根本
-            // 不知道"挡满会让它失衡"。第一次真晕的时候对拍会判这个字符串。
+            // 不知道"挡满会让它失衡"。第一次真晕的时候校验会判这个字符串。
             EnemyMove { name: "晕眩", intent: "Stun",
                 ops: &[EOp::ClearSelfStatus(St::OffBalance)] },
         ],
@@ -6336,7 +6336,7 @@ pub static ENEMIES: &[EnemyDef] = &[
             EnemyMove { name: "尖啸", intent: "StatusCard", ops: &[EOp::AddCardToDiscard { card: card::DAZED, count: 3 }] },
         ],
     },
-    // 27 [实测] 虱虫之祖（第2幕）—— 整条循环由 `act2_f31_louse.json` 逐回合钉死
+    // 27 [实测] 虱虫之祖（第2幕）—— 整条循环由 `历史验证样本` 逐回合钉死
     //
     // **这条曾经叫「始祖虱虫」**（照 wiki 的 `louse-progenitor` 直译），而游戏里显示的
     // 是**虱虫之祖**。名字是 `enemy_id()` 唯一的连接键，所以那个译名让
@@ -6353,7 +6353,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 两处按实测改掉了原来照 wiki 填的值：
     //   * `max_hp` 136 -> **134**。wiki 写 "134 - 136"，内核只有一个字段，取实测那个。
     //   * 蜷缩生长的 intent `Buff` -> **`Defend`**。游戏显示 `Defend:, Buff:`，
-    //     而 `replay::move_signature` 是「主意图在前、副作用意图在后」。写成 Buff
+    //     而 状态导入层 是「主意图在前、副作用意图在后」。写成 Buff
     //     会让签名变成 `Buff, Defend`，顺序对不上，整只敌人判「对不齐」。
     //
     // 开局的**蜷身 14** 是 status 不是招式，规则在 `POWERS` 表里（`St::CurlUp`）。
@@ -6370,7 +6370,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 这个下标原来是一条 [wiki] 档的「螨虫」，**是错的**（浓毒建成了「虚弱 2」），09-14 先摘成占位、
     // 同一天照 [源码] 填回来。名字（怪物和招式）取自游戏本地化表：`MYTE.name` = 异螨。
     //
-    // 血量 61–67（`ToughEnemies` 64–69），表里取上界 67，合成路径从 `asc::hp_range` 掷。
+    // 血量 61–67（`ToughEnemies` 64–69），表里取上界 67，战斗构造路径从 `asc::hp_range` 掷。
     // 定环 浓毒 -> 啃咬 -> 吸吮 -> 浓毒；**起手按站位**（[源码] 初始态是读 `SlotName` 的
     // `ConditionalBranchState`）：`first` 先浓毒、`second` 先吸吮，见 `M_MYTE`。
     //   浓毒：往我**手牌**塞 2 张毒素（`StatusIntent(2)`，写死的 `_toxicCount`，不吃进阶；手满溢出进弃牌堆）
@@ -6447,8 +6447,8 @@ pub static ENEMIES: &[EnemyDef] = &[
             EnemyMove { name: "狂怒", intent: "Buff", ops: &[EOp::SelfStatus { st: St::Strength, amt: 2 }] },
         ],
     },
-    // 32 [wiki] 造门者 —— **不在任何一幕的遭遇池里**（`data/encounters.json` 四幕都没有它，
-    // `data/enemy_ids.json` 也没有类名连到这里）。原来标成「Act 2 Boss」，标错了；
+    // 32 [wiki] 造门者 —— **不在任何一幕的遭遇池里**（验证数据 四幕都没有它，
+    // 验证数据 也没有类名连到这里）。原来标成「Act 2 Boss」，标错了；
     // 大概是 wiki 上一个旧版本的 Boss。留着只因为删掉会让后面的下标整体平移。
     EnemyDef {
         name: "造门者", max_hp: 489, start_status: &[], loop_from: 0, machine: None,
@@ -6469,8 +6469,8 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // **这场仗的核心是知识的诅咒**：不打人，弹一个**不能跳过**的二选一（`canSkip` 默认 false），
     // 三次各是 瓦解 6 / 心灵腐化 1 · 瓦解 7 / 懒惰 3 · 瓦解 8 / 虚脱 1，全是永久的。
-    // 选哪边是**玩家的决策**，内核照 `State::curse_policy` 执行：L3 把 8 种选法配对比一遍，
-    // L2 不给它定价（价值全在后面几个回合）。
+    // 选哪边是**玩家的决策**，内核照 `State::curse_policy` 执行：评估层 把 8 种选法配对比一遍，
+    // 搜索层 不给它定价（价值全在后面几个回合）。
     EnemyDef {
         name: "知识恶魔", max_hp: 379, start_status: &[], loop_from: 0,
         machine: Some(&M_KNOWLEDGE_DEMON),
@@ -6490,7 +6490,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // ---------------------------------------------------------------------
     // 34/35 [实测] 第2幕 Boss 双怪：碾碎爪 + 火箭
     //
-    // 出招表整条由 `act2_f33_boss_crusher.json` 七个回合逐条确认，**但这场仗里有
+    // 出招表整条由 `历史验证样本` 七个回合逐条确认，**但这场仗里有
     // 三条内核完全没有的机制**，加它们之前先知道会错在哪：
     //
     //   1. **遭到包围 / 背后攻击**（玩家 `SURROUNDED_POWER`，敌人
@@ -6502,12 +6502,12 @@ pub static ENEMIES: &[EnemyDef] = &[
     //      「两个括号不是同一个变体轴，没分辨出来」）：**血量走 A8 `ToughEnemies`**
     //      （209→219 / 199→209），**伤害和力量走 A9 `DeadlyEnemies`**。实录全是 A0/A1，
     //      所以两列都是低档，下面写的就是低档。碾碎爪有三个 A9 数（摧折 / 戒备打击 14、
-    //      适应 +3）生成器按值认不出（和别的 op 撞值），手填在 `data/ascension_overrides.json`。
+    //      适应 +3）生成器按值认不出（和别的 op 撞值），手填在 验证数据。
     //
-    // 后果：默认对拍模式**不受影响**（它注入观测到的标签，乘区已经在标签里）；
+    // 后果：默认校验模式**不受影响**（它注入观测到的标签，乘区已经在标签里）；
     // 但 `--predict-enemy` 算出来的数字会在背后攻击的回合偏低 1/3，落进
     // 「只对上类型」。那不是内核算错，是这个模式看不见朝向 —— 和它看不见玩家
-    // 易伤是同一类局限。**跨回合 rollout 在朝向建模之前不要用这两只。**
+    // 易伤是同一类局限。**跨回合 推演层 在朝向建模之前不要用这两只。**
     //
     // 下面每一手的基础值都是从标签反推的，附了判据：
     //
@@ -6529,7 +6529,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //           回合6 `Attack:7`           = (3+2) × 1.5 = 7.5 → 7 回到瞄准镜 ⇒ loop_from = 0
     //           回合7 `Attack:30`          = (18+2) × 1.5          精准光束，循环确认
     //
-    // 招式的**中文名是照 wiki 的英文 id 译的**（trace 只记意图类型和数字，不记招名），
+    // 招式的**中文名是照 wiki 的英文 id 译的**（验证样本 只记意图类型和数字，不记招名），
     // 纯显示用，不参与任何比较。数字和 intent 才是实测的。
     //
     // 火箭「充电」的 intent 实测是 **`Sleep`**，而 wiki 那一列写的是 `Utility` ——
@@ -6539,8 +6539,8 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 三个 status 内核都没有」—— 那句话过期了**：三个 status 后来都建了
     // （`Surrounded` 进伤害管线的背后 ×1.5、`BackAttackLeft/Right` 是站位、
     // `CrabRage` 有 `AllyDied` 规则），只有这张表没跟着改。
-    // 对拍路径上看不见，因为 `sync` 每帧从观测重灌这三个；
-    // **合成路径没有观测**，`bin/synth_audit` 在 `act2_f33_boss_crusher` 上
+    // 校验路径上看不见，因为 `状态导入` 每帧从观测重灌这三个；
+    // **战斗构造路径没有观测**，验证数据 在 `历史验证样本` 上
     // 一次报了 5 处（玩家 Surrounded + 两只各两个）。
     //
     // [源码] `Crusher.AfterAddedToRoom`：`BackAttackLeftPower(1)` + `CrabRagePower(1)`
@@ -6571,7 +6571,7 @@ pub static ENEMIES: &[EnemyDef] = &[
             EnemyMove { name: "充电", intent: "Sleep", ops: &[EOp::Nothing] },
         ],
     },
-    // 蛮兽 [源码] `Mawler`（2026-08-22 补，实录 `act1_f5_new_fourth` 里
+    // 蛮兽 [源码] `Mawler`（2026-08-22 补，实录 `历史验证样本` 里
     // 它是第一只内核不认识的敌人）。
     //
     // 三手都从一个共享的随机分支出来，起始态是**爪击**
@@ -6638,7 +6638,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 名字就是敌人的连接键。我第一版照类名写，实战里当场报
     // 「4 只里认出 0 只」。和「始祖虱虫」那个乌龙是同一类错误。
     // A0 血量 17-21，取中位 19 —— **实战里以观测为准**，这个数只在内核
-    // 自己推演（rollout / L3）时用得上。
+    // 自己推演（推演层 / 评估层）时用得上。
     // 扭动 = 给我 1 张感染进弃牌堆 + 自己力量 +2（[源码] 两件事一起做）。
     EnemyDef {
         name: "扭动虫", max_hp: 19, start_status: &[], loop_from: 0,
@@ -6707,7 +6707,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // **血量是个区间，表里只能填一个数。** 实测三只 24 / 25 / 28，
     // 取上界 28 —— 和内核别处一样选**不高估玩家**的那边（敌人当作更硬）。
-    // 对拍那条路不受影响：`sync` 用的是观测到的血量。
+    // 校验那条路不受影响：`状态导入` 用的是观测到的血量。
     //
     // 出招见 `M_EXOSKELETON`。
     EnemyDef {
@@ -6793,7 +6793,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // [源码] `HatchMove` 走 `CreatureCmd.SetMaxAndCurrentHp(19-22)` —— 同一只怪
     // 原地换名字（结实的卵 -> 幼虫）并把血量重掷成满血。内核没有
     // "敌人原地变形"这种 op，加它要动 `EOp`。
-    // **默认对拍路径上无所谓**（名字和血量都是观测量，`sync` 每帧照抄），
+    // **默认校验路径上无所谓**（名字和血量都是观测量，`状态导入` 每帧照抄），
     // 只有预测路径会停在卵的血量上 —— 记在这里，别当成建完了。
     EnemyDef {
         name: "结实的卵", max_hp: 18, start_status: &[(St::Hatch, 1)], loop_from: 1,
@@ -6910,14 +6910,14 @@ pub static ENEMIES: &[EnemyDef] = &[
             // 反过来写（先升级再生成）在**场上一张凋萎都没有**时会错：源码那边
             // 新生成的那张仍然拿到 `count+1` 层，而内核抄不到任何东西、给 0 层。
             // 两种写法在「场上已有凋萎」时给出相同的数 —— 实录里的两次剧烈增强
-            // 恰好都是这种情况，**所以对拍分不开它们**，判据只有源码。
+            // 恰好都是这种情况，**所以校验分不开它们**，判据只有源码。
             // （这一条是 2026-08-25 故意改错验成色时抓到的：把顺序对调，
-            // 五项对拍和当时那个测试全都不红。）
+            // 五项校验和当时那个测试全都不红。）
             //
             // **第 3 件只建了 base，没建 `AdditionalStrength` 的递增**：
             // 真实是 +3 / +4 / +5 …（每用一次多 1），内核每次都是 +3。
             // 欠的是一个"这一招用过几次"的计数器，而那**不是观测量** ——
-            // `sync` 每帧从观测重建敌人 status，携带不过来。
+            // `状态导入` 每帧从观测重建敌人 status，携带不过来。
             // **偏的方向：长仗里低估这只 Boss 的力量，也就是乐观。**
             EnemyMove { name: "剧烈增强", intent: "StatusCard",
                 ops: &[
@@ -6997,7 +6997,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 防御型 {Guardbot, Noisebot}，且 `_lastSpawned` 那只本次排除（两只的池子里
     // 等于**必定和上次不同**）。内核的 `EOp::Summon` 只能写死一个 def，
     // 表达不了"两选一 + 排除上次"，所以各取实测见过的那只。
-    // 对拍不受影响（敌人由观测同步），受影响的是 rollout 和 L2 对"召唤出什么"的预期。
+    // 校验不受影响（敌人由观测同步），受影响的是 推演层 和搜索层 对"召唤出什么"的预期。
     EnemyDef {
         name: "组装师", max_hp: 150, start_status: &[], loop_from: 0,
         machine: Some(&M_FABRICATOR),
@@ -7097,7 +7097,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // **接续 2026-09-14 建了**（死后第二个敌人回合回 25 血，规则见 `POWERS` 的 `St::Reattach`）。
     // 在那之前内核低估这一场。[实测] 2026-08-27 那一局我靠"三节要死就同一回合死"
-    // 绕过了它；`act2_f28_decimillipede` 那一局没绕开，两节各复活了一次 —— 那两次就是这条规则的证据，
+    // 绕过了它；`历史验证样本` 那一局没绕开，两节各复活了一次 —— 那两次就是这条规则的证据，
     // 也说明**窗口其实是两个我方回合**，不是同一回合。
     EnemyDef {
         name: "残杀千足虫", max_hp: 42, start_status: &[(St::Reattach, 25)], loop_from: 0,
@@ -7134,7 +7134,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //      （`SetMoveImmediate` 是**换掉**当前 MoveState，不是推迟），
     //      于是它整场没拿到那 +5，也没来得及走到冲锋。
     //
-    // [实测] 2026-08-30 第 3 幕第 43 层，`traces/act3_f43_frog_knight.json`：
+    // [实测] 2026-08-30 第 3 幕第 43 层，`traces/历史验证样本`：
     // 起手舌鞭 13 + 脆弱 2、第二手除恶 21、第三手 Buff，与状态机逐帧对上；
     // 覆甲层数 15/15/14/13 与格挡 15/15/14/13 同值。
     EnemyDef {
@@ -7166,7 +7166,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // `3 × (2 − 库存)` 力量 ⇒ 第二具 +3、第三具 +6，**越死越强**。
     // 溢出伤害全废（新的一具是满血），所以"算准最后一刀"在这只身上特别值钱。
     //
-    // [实测] 2026-08-30 第 3 幕第 45 层，`traces/act3_f45_axebot.json`：
+    // [实测] 2026-08-30 第 3 幕第 45 层，`traces/历史验证样本`：
     // 原装那只起手就是锤击上勾拳（12 + 虚弱2 + 脆弱2，意图 `Attack:12, Debuff:`），
     // 之后一二连击 9×2；两具重生的都从启动起手（意图 `Defend:, Buff:`，
     // 10 格挡 + 力量 3 / 6），与状态机逐帧对上。
@@ -7197,7 +7197,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // 起手固定灵魂灼烧 29，之后在三手里等权随机（不能连出同一手）。
     //
-    // [实测] 2026-08-30 第 3 幕第 46 层，`traces/act3_f46_soul_nexus.json`：
+    // [实测] 2026-08-30 第 3 幕第 46 层，`traces/历史验证样本`：
     // 起手灵魂灼烧 29、第二手汲取生命 18（挂易伤2+虚弱2）、
     // 第三手大漩涡（易伤下显示 9×4）、第四手汲取生命（易伤下显示 27），
     // 与状态机逐帧对上。
@@ -7350,7 +7350,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 7: 爆炸：打记下的那么多，然后自杀
     // 循环：0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 1 ...；死亡规则把它强制进 6（`POWERS` 的蒸汽喷发）
     //
-    // [实测] `act1_f17_waterfall_giant`（A2）：第 4 -> 5 回合 174 -> 184（虹吸 +10）· 高压枪第 5 回合 20、
+    // [实测] `历史验证样本`（A2）：第 4 -> 5 回合 174 -> 184（虹吸 +10）· 高压枪第 5 回合 20、
     // 第 10 回合 25 · 砍死之后 999999999 血、第 11 回合意图 Stun、第 12 回合 DeathBlow 42（= 15 + 9 × 3）。
     // 2026-09-15 之前内核这三处都没建（回血 / +5 / 死后），方向全是乐观。
     EnemyDef {
@@ -7448,7 +7448,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 全部照 [源码] 抄：血量取 `MinInitialHp` 那一档（A0），
     // 招式数值取 `AscensionHelper.GetValueIfAscension(...)` 的**第二个参数**
     // （那才是低进阶值 —— 读反了整批会系统性偏高）。
-    // 意图签名逐只和第 0 帧的观测对过（`bin/synth_audit` 的开局第一手那一栏）。----
+    // 意图签名逐只和第 0 帧的观测对过（验证数据 的开局第一手那一栏）。----
     //
     // 淤泥旋螺：喷油（8 + 虚弱1）· 猛砸（11）· 狂怒（6 + 自身力量3）
     EnemyDef {
@@ -7566,7 +7566,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     },
     // ---- 2026-09-13 第 3 幕补敌人（批 1 + 批 2）--------------------------------
     // **全部 [源码]，没有一条实录**：数值取低进阶档（`GetValueIfAscension(level, 高, 低)`
-    // 的第二个数），第一次实战打出时对拍才判它。名字（怪物名和招式名）取自游戏本地化表；
+    // 的第二个数），第一次实战打出时校验才判它。名字（怪物名和招式名）取自游戏本地化表；
     // 图鉴里隐藏的招式没有译名，照抄 [源码] 的 id。
     //
     // 82 [源码] 史莱姆狂战士 `SlimedBerserker`（第 3 幕杂兵，`SlimedBerserkerNormal`）
@@ -7718,7 +7718,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // 只在 `SlumberingBeetleNormal` 出现，和盛碗虫（石）+ 盛碗虫（丝）同场（站位 first / second / third）。
     // 血量 86（`ToughEnemies` 89，不是区间）。开局 **覆甲 15**（`ToughEnemies` 18 ——
-    // 生成器认不出开局 status 里的数，和青蛙骑士同一个欠账，见 `data/ascension.json`）+ **熟睡 3**。
+    // 生成器认不出开局 status 里的数，和青蛙骑士同一个欠账，见 验证数据）+ **熟睡 3**。
     //
     //   0 打鼾（`SleepIntent`）：什么都不做
     //   1 出击（`SingleAttackIntent` + `BuffIntent`）：16（`DeadlyEnemies` 18）+ 自身力量 2（写死）
@@ -7786,7 +7786,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // `VantomBoss` 单怪，**第 1 幕密林三个 Boss 之一** ⇒ 约占所有局的 1/6。
     // 血量 173（`ToughEnemies` 183，`Min == Max`）。开局 **滑溜 8**（`ToughEnemies` 9 ——
-    // 开局 status 里的数进阶生成器认不出，和青蛙骑士 / 熟睡甲虫同一个欠账，见 `data/ascension.json`）。
+    // 开局 status 里的数进阶生成器认不出，和青蛙骑士 / 熟睡甲虫同一个欠账，见 验证数据）。
     //
     //   0 墨迹（`SingleAttackIntent`）：7（`DeadlyEnemies` 8）
     //   1 墨水长枪（`MultiAttackIntent`）：6×2（`DeadlyEnemies` 7×2）
@@ -7814,7 +7814,7 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // `InkletsNormal` **三只同场**，中间那只起手旋风（见 `M_INKLET`）。
     // 血量 11–17（`ToughEnemies` 12–18）—— **是区间**，这里的 `max_hp` 取中位 14，
-    // 真实血量合成路径从 `asc::hp_range` 掷、对拍路径从观测灌。
+    // 真实血量战斗构造路径从 `asc::hp_range` 掷、校验路径从观测灌。
     // 开局 **滑溜 1**：每只都要多挨一次命中才开始掉血，三只就是三次。
     //
     //   0 刺击（`SingleAttackIntent`）：3（`DeadlyEnemies` 4）
@@ -7877,7 +7877,7 @@ pub static ENEMIES: &[EnemyDef] = &[
         ],
     },
     // 97 [源码] 蟾蜍蝌蚪 `Toadpole`（`ToadpolesWeak` **两只同场**，第 1 幕暗港的弱遭遇）。
-    // 血量 21–25（`ToughEnemies` 22–26）—— 区间，`max_hp` 取中位 23，合成路径从 `asc::hp_range` 掷。
+    // 血量 21–25（`ToughEnemies` 22–26）—— 区间，`max_hp` 取中位 23，战斗构造路径从 `asc::hp_range` 掷。
     //   0 吐刺（`MultiAttackIntent`）：**先**给自己 −2 荆棘，再 3×3（A9 4×3）
     //   1 旋转（`SingleAttackIntent`）：7（A9 8）
     //   2 带刺（`BuffIntent`）：自身荆棘 +2（不吃进阶）
@@ -7978,7 +7978,7 @@ pub static ENEMIES: &[EnemyDef] = &[
         ],
     },
     // 103 [源码] 劫掠者刺客 `AssassinRubyRaider`（`RubyRaidersNormal` 五选三）。
-    // 血量 18–23（A8 19–24），`max_hp` 取偏低的中位 20（合成路径从 `asc::hp_range` 掷，这个数只是兜底）。
+    // 血量 18–23（A8 19–24），`max_hp` 取偏低的中位 20（战斗构造路径从 `asc::hp_range` 掷，这个数只是兜底）。
     //   0 致命射击（`SingleAttackIntent`）：10（A9 11），`FollowUpState` 指向自己 —— 一直这一手
     EnemyDef {
         name: "劫掠者刺客", max_hp: 20, start_status: &[], loop_from: 0, machine: None,
@@ -8032,7 +8032,7 @@ pub static KNOWLEDGE_CURSES: [CurseSet; 3] = [
 /// [玩家判定] 2026-09-14：「第一个都可以，第二一般选瓦解，第三个看情况」。
 /// 所以只有第 2 位是判定，第 1、3 位是 `[判断]`（第 1 位随手取了心灵腐化；第 3 位要看局面，
 /// 那正是 `advise` 单场问法把 8 种选法全摆出来的原因）。
-/// **它只决定没人问的时候怎么打**：整幕链、跨回合推演、`fight_eval` 这类验收台。
+/// **它只决定没人问的时候怎么打**：整幕链、跨回合推演、`fight_eval` 这类验证工具。
 pub const DEFAULT_CURSE_POLICY: u8 = 0b010;
 
 /// 知识的诅咒**已经落下过几次** —— 从玩家身上的诅咒 status 反推，不另存计数器。
@@ -8081,7 +8081,7 @@ pub fn about_to_blow(e: &crate::state::Entity) -> bool {
 
 /// 「**这一个形态**还剩多少血」。锁血等自爆时是 **0**：它会自己炸死，那 999999999 不是要打的血 ——
 /// 当成血量的话，叶评估会以为砍死它**亏了**十亿血（求解器宁可不收人头，和下面那条是同一个坑），
-/// L3 那边「两边都死的仗谁把敌人打得更残」也会被这一个数淹掉。
+/// 评估层 那边「两边都死的仗谁把敌人打得更残」也会被这一个数淹掉。
 #[inline]
 pub fn hp_left_this_form(e: &crate::state::Entity) -> i32 {
     if about_to_blow(e) {
@@ -8139,11 +8139,11 @@ pub fn death_summon_hp(e: &crate::state::Entity) -> i32 {
 /// > **死时召唤那一类 2026-09-19 才补**，补之前是同一个陷阱的另一种形状：砍死宿主那一下，
 /// > 这一项从「宿主剩的几点」跳到「召出来的那几只的满血」，求解器于是**不肯收掉宿主**。
 /// > 是建地精佣兵时照出来的（起手牌组打它 10 个回合、掉 76 血；补上之后 4 个回合、30 血），
-/// > 回头一查**早就在的异蛙寄生虫一直是这样**：实录 `act1_f12_elite_phrog` 玩家这一场 −1 血，
+/// > 回头一查**早就在的异蛙寄生虫一直是这样**：实录 `历史验证样本` 玩家这一场 −1 血，
 /// > 内核重打 64 次死 57 次（89%）、11 个回合；补上之后 0 死、5 个回合、p50 掉 18。
-/// > 数字和归因见 verification-log 2026-09-19。
+/// > 数字和归因见 验证记录 2026-09-19。
 ///
-/// **为什么 L2 的叶评估必须用这个数**：`eval` 拿"当前敌人血量"当进度，
+/// **为什么 搜索层的叶评估必须用这个数**：`eval` 拿"当前敌人血量"当进度，
 /// 而复活是**必然要来的** —— 用当前血量的话，砍掉最后那几点会让这一项
 /// 从 4 跳到 200，于是求解器**宁可站着挨打也不肯收人头**。
 ///
@@ -8152,7 +8152,7 @@ pub fn death_summon_hp(e: &crate::state::Entity) -> i32 {
 /// 单回合和 D=2 **两条线还一致**。而正解是砍掉那 4 血 ——
 /// 换来的形态 2 第一手是复苏，根本不打人。
 ///
-/// 这条是**游戏知识**，所以放在 `content` 而不是 L2（不变量：L2 不实现规则）。
+/// 这条是**游戏知识**，所以放在 `content` 而不是 搜索层（不变量：搜索层 不实现规则）。
 pub fn remaining_hp_including_revives(e: &crate::state::Entity) -> i32 {
     let hp = hp_left_this_form(e) + death_summon_hp(e);
     if e.get(St::Adaptable) <= 0 {
@@ -8177,12 +8177,12 @@ pub fn remaining_hp_including_revives(e: &crate::state::Entity) -> i32 {
 /// 那是把一个稀疏事实摊成一列噪声。按名字（不是下标）索引则**不会随表的增删漂移**，
 /// `enemy_start_player_status_names_resolve` 守着每条都指得到真敌人。
 ///
-/// 消费者是 [`crate::step::begin_combat`]（**唯一**）。对拍那条路一个字节不动：
-/// `sync` 一律安 `enemy::UNKNOWN`、也从不走 `begin_combat`，这几个 status
-/// 在那边本来就是从观测灌的。**它是给合成路径用的**（`synth::build`）。
+/// 消费者是 [`crate::step::begin_combat`]（**唯一**）。校验那条路一个字节不动：
+/// `状态导入` 一律安 `enemy::UNKNOWN`、也从不走 `begin_combat`，这几个 status
+/// 在那边本来就是从观测灌的。**它是给战斗构造路径用的**（战斗构造层）。
 pub static ENEMY_START_PLAYER_STATUS: &[(&str, St, i32)] = &[
     // 第 2 幕 Boss 的右半边。包围让**从背后打来**的攻击 ×1.5（`damage.rs`），
-    // 少了它 L3 会系统性低估这场仗 —— 方向是最危险的那种（乐观）。
+    // 少了它 评估层 会系统性低估这场仗 —— 方向是最危险的那种（乐观）。
     ("火箭", St::Surrounded, 1),
 ];
 
@@ -8203,10 +8203,10 @@ pub fn enemy_start_player_status(name: &str) -> impl Iterator<Item = (St, i32)> 
 ///
 /// # 为什么是按名字索引的侧表，而不是 `EnemyDef::start_status`
 ///
-/// **两个消费者，两条路径**：`step::begin_combat`（合成路径，按 def 名）和
-/// `replay::Replayer::sync`（对拍 / 实战路径，按观测到的名字）。后者一律把敌人安成
-/// `enemy::UNKNOWN`、读不到 `start_status` —— 放进 `start_status` 的话，对拍路径上
-/// 砍死幽灵骑士永远不解咒。和 `sync` 从观测补 `St::SlowSource` 是同一件事：
+/// **两个消费者，两条路径**：`step::begin_combat`（战斗构造路径，按 def 名）和
+/// 状态导入层（外部状态导入路径，按观测到的名字）。后者一律把敌人安成
+/// `enemy::UNKNOWN`、读不到 `start_status` —— 放进 `start_status` 的话，校验路径上
+/// 砍死幽灵骑士永远不解咒。和 `状态导入` 从观测补 `St::SlowSource` 是同一件事：
 /// **"谁是施咒者"是身份，不是预测。**
 pub static ENEMY_PRIVATE_MARKERS: &[(&str, St, i32)] = &[
     ("幽灵骑士", St::HexCaster, 1),
