@@ -1,13 +1,8 @@
-name: CI
+name: core-ci
 
-# 这个仓库的价值在「全套跑一遍」，而语料就在仓库里，所以 CI 能跑真验收
-# 而不只是编译。分成两类：
-#   * 硬门     —— 今天是绿的，红了就是回归
-#   * 已知红   —— 今天就是红的（各自在 docs/acceptance.md「当前基线」里点了名），
-#                 CI 守的是**不许变多**，而不是假装它绿
 on:
   push:
-    branches: [main]
+    branches: [sim-core]
   pull_request:
   workflow_dispatch:
 
@@ -15,137 +10,16 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  acceptance:
-    name: 构建 + 全套对拍验收
+  core:
+    name: build + core tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: 工具链版本（读数要可归因）
+      - name: Toolchain
         run: |
           rustc --version
           cargo --version
-
-      - name: 构建
-        run: cargo build --release --all-targets
-
-      # ------------------------------------------------------------------
-      # 硬门：今天是绿的，红了就是回归
-      # ------------------------------------------------------------------
-      - name: 单元测试
-        run: cargo test --release
-
-      - name: 敌人出招预测
-        run: cargo run --release --bin verify -- traces/act*.json traces/synthetic_*.json --predict-enemy
-
-      - name: L2 自洽性（实战线不许赢过穷尽搜索）
-        run: cargo run --release --bin solve -- traces/act*.json
-
-      - name: 跨回合验收 · solver 策略
-        run: cargo run --release --bin rollout -- traces/act*.json
-
-      # ------------------------------------------------------------------
-      # 已知红：只守「不许变多」
-      #
-      # 基线是 2026-09-02 实测的。**修好了就把基线往下调**，别让它一直挂在
-      # 那儿当装饰 —— 这个仓库栽过两次"注释声称有测试守着而那条测试够不到"。
-      # 好转时 CI 会主动提醒（::notice::）。
-      # ------------------------------------------------------------------
-      - name: 一步预测 / 整回合（已知红，守不许变多）
-        shell: bash
-        run: |
-          # 2026-09-03：复活窗口那 4 帧修好了（`revive_owed` + `step` 的无目标牌
-          # 分支），基线跟着从 5 调到 1。
-          BASE_ONE=1     # act1_f8_elite_terror_eel 帧0：附魔补丁之前录的老 trace
-          # 两帧都是**同一件事**：一张带灵巧的耸肩无视，内核按卡表算 8 而游戏给 10。
-          #   · act1_f8_elite_terror_eel  —— trace 录在附魔字段之前，观测里没有这个量
-          #   · act1_f14_phantasmal_gardeners —— 那一张是段内被抽出来的，
-          #     而牌堆的附魔到 2026-09-03 的 mod 补丁才有；**两条语料都重录不了**
-          # 补丁之后录的新语料不该再出现这一类，所以这个 2 只出不进。
-          BASE_TURN=2
-
-          # verify 有不一致时退出码是 1，所以整条都要 || true；
-          # 全绿时 grep 抓不到东西，输出为空 -> 后面兜底成 0
-          ONE=$( { cargo run --release --bin verify -q -- traces/act*.json traces/synthetic_*.json 2>&1 || true; } \
-                 | grep -oE '[0-9]+ 帧不一致' | grep -oE '[0-9]+' | tail -1 || true )
-          TURN=$( { cargo run --release --bin verify -q -- traces/act*.json traces/synthetic_*.json --per-turn 2>&1 || true; } \
-                 | grep -oE '[0-9]+ 帧不一致' | grep -oE '[0-9]+' | tail -1 || true )
-          ONE=${ONE:-0}
-          TURN=${TURN:-0}
-          echo "一步预测 $ONE 帧（基线 $BASE_ONE） / 整回合 $TURN 帧（基线 $BASE_TURN）"
-
-          fail=0
-          if [ "$ONE" -gt "$BASE_ONE" ]; then
-            echo "::error::一步预测不一致帧数 $ONE > 基线 $BASE_ONE"
-            fail=1
-          elif [ "$ONE" -lt "$BASE_ONE" ]; then
-            echo "::notice::一步预测好转（$ONE < $BASE_ONE）—— 把 BASE_ONE 调下来"
-          fi
-          if [ "$TURN" -gt "$BASE_TURN" ]; then
-            echo "::error::整回合不一致帧数 $TURN > 基线 $BASE_TURN"
-            fail=1
-          elif [ "$TURN" -lt "$BASE_TURN" ]; then
-            echo "::notice::整回合好转（$TURN < $BASE_TURN）—— 把 BASE_TURN 调下来"
-          fi
-          exit "$fail"
-
-      # **不判红，但要跑。** 它报的是「合成战斗构造器缺什么」——内容覆盖问题，
-      # 和 MISMATCH 不是一档，所以没有阈值。放进 CI 的理由只有一个：
-      # 它是唯一一条检验「开局那一刻」的路（其余七条全从 `Replayer::sync` 出发，
-      # 而第 1 回合的 `TurnStart` 只有 `begin_combat` 跑得到），
-      # 不跑它就会静默烂掉。`data/` 读不到时它自己降级，不会红。
-      - name: 合成战斗构造器（第 0 帧逐字段比，不判红）
-        run: cargo run --release --bin synth_audit -- traces/act*.json traces/synthetic_*.json
-
-      # ------------------------------------------------------------------
-      # L3 的两道硬门 + Python 那一层的守卫。
-      # **判据都是截断率 0**（分母一个是仗、一个是链）：撞上回合上限的推演
-      # 没有分出胜负，而它照样带着一个血量 —— 那是本仓库最忌讳的"自信地算错"。
-      # 别用 `--max-turns` 去消它。
-      # ------------------------------------------------------------------
-      - name: L3 单场评估（硬门：截断率 0）
-        run: cargo run --release --bin fight_eval -- traces/act*.json traces/synthetic_*.json
-
-      - name: L3 整幕链（硬门：截断率 0；另报回溯检验）
-        run: cargo run --release --bin act_eval -- traces/act*.json
-
-      # 从实况 JSON 到请求那一段（认牌名 / 认幕 / 拼请求）在这之前**一条守卫都没有**。
-      # 测试集是 `tools/fixtures/` 里两份手搓的实况，不需要游戏、不需要 mcp 包
-      # —— `advise_core.py` 只用标准库。
-      - name: L3 接线自检（Python 那一层，离线）
-        run: python3 tools/advise_core.py --selftest
-
-      - name: 跨回合验收 · fast 策略（已知红，守不许变多）
-        shell: bash
-        run: |
-          BASE_TRUNC=1   # 生产口径（30 回合上限）下被截断的推演条数
-          OUT=$( cargo run --release --bin rollout -q -- traces/act*.json --policy fast 2>&1 || true )
-          echo "$OUT" | tail -30
-
-          TRUNC=$( echo "$OUT" | grep -oE '有 [0-9]+/[0-9]+ 条推演没打完' | grep -oE '[0-9]+' | head -1 || true )
-          TRUNC=${TRUNC:-0}
-          echo "被截断 $TRUNC 条（基线 $BASE_TRUNC）"
-
-          if [ "$TRUNC" -gt "$BASE_TRUNC" ]; then
-            echo "::error::截断条数 $TRUNC > 基线 $BASE_TRUNC"
-            exit 1
-          elif [ "$TRUNC" -lt "$BASE_TRUNC" ]; then
-            echo "::notice::好转（$TRUNC < $BASE_TRUNC）—— 把 BASE_TRUNC 调下来"
-          fi
-          exit 0
-
-  planner:
-    # 约 15 分钟，只有动了跨回合 planner 才需要。手动触发或打 tag 时跑。
-    name: 跨回合 planner D=2（慢，按需）
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo build --release --all-targets
-      - name: P1–P5（D=2 vs D=1 配对）
-        run: cargo run --release --bin rollout -- traces/act*.json --policy plan --plan-depth 2 --depth-sweep 1
-      # **这一条独占三件上面那条照不到的事**：候选覆盖 / 到边界后悔 / 深层内层最优性。
-      # 尤其是候选覆盖 —— 不在候选集里的线，叶评估和目标函数评得再准也评不到，
-      # 所以那一栏对下游的一切改动免疫。`--inner` 太慢（约 25 分钟），不进 CI。
-      - name: planner 审计（候选覆盖 / 到边界后悔）
-        run: cargo run --release --bin plan_audit -- traces/act*.json
+      - name: Build library
+        run: cargo build --release --lib
+      - name: Test core contract
+        run: cargo test --release --tests

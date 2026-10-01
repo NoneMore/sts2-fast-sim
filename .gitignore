@@ -1,61 +1,6 @@
-# Rust 编译产物与备份
 target/
 **/*.rs.bk
 
-# Python 虚拟环境与字节码
-.venv/
-__pycache__/
-*.pyc
-
-# 反编译产物（可再生：从 sts2.dll 反编译）
-decompiled/
-
-# 编辑器
 .idea/
 .vscode/
-
-# ---------------------------------------------------------------------------
-# traces/ 里混着三类东西，只有第一类该进仓库：
-#   1. 对拍语料      act*.json / synthetic_*.json / passive_*.json  ← 不可再生，必须跟踪
-#   2. 权威数据表    *_catalog.json / enemies_wiki.json             ← 可重导，但当前仍跟踪
-#   3. 配置与生成物  下面这些                                        ← 不跟踪
-# ---------------------------------------------------------------------------
-
-# 两个录制器的配置文件。录制器跑完会自动把动作行注释掉，
-# 跟踪它等于每录一场就产生一次 diff 噪音。
-traces/_plan.txt
-traces/_plan.txt.tmp
-traces/_watch.txt
-
-# 生成物
-traces/_live.json
-# L3 顾问的「这是哪一幕 / Boss 是谁」缓存（tools/advise_core.py 写）。
-# 它是**这一局**的状态，跟踪它等于把上一局的幕名提交进仓库。
-traces/_advise_ctx.json
-traces/_seed_sweep.json
-traces/_t5.json
-traces/raw_*/
-# 原始帧（整理成 act*.json 之前录下来的）和一次验收跑出来的日志目录。
-# 结论已经写进 docs/verification-log.md；原件只留在本地。
-traces/raw/
-traces/reports_*/
-
-# ---------------------------------------------------------------------------
-# data/ 里的东西**全部跟踪**，尽管其中一半是生成的。分两类：
-#   1. 手写      *_overrides.json                 ← 不可再生，必须跟踪
-#   2. 生成      encounters.json / enemy_ids.json / ascension.json
-#                （连同 src/asc.rs）              ← 可重跑，但**仍然跟踪**
-# 第 2 类跟踪的理由和 traces/ 的权威表一样，外加一条自己的：
-# 它们的输入是 decompiled/，而那个目录是 .gitignore 掉的 ——
-# 不跟踪产物的话，clone 下来的仓库根本重跑不出这几份表，而 src/asc.rs 还要参与编译。
-# ---------------------------------------------------------------------------
-
-# sts2.wiki 的抓取缓存（tools/dump_bestiary.py 用）。
-# 可再生，而且是**别人网站的内容** —— 不该装在一个 MIT 仓库里重新分发。
-traces/.wiki_cache/
-
-# 会话记录 / 草稿。**永远不要提交** ——
-# 2026-09-02 发现 scratch_agent.txt + scratch_user.txt 从 `Initial commit` 起
-# 就在公开仓库里，里面有 prompt 原文和 29 处 harness 元数据（时间戳、模型选择）。
-# 已经改写历史清掉了，别再让它们回来。
-scratch_*.txt
+.DS_Store

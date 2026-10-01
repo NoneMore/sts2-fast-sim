@@ -2,6 +2,8 @@
 name = "sts2core"
 version = "0.1.0"
 edition = "2021"
+description = "Deterministic high-performance simulation core for Slay the Spire 2"
+autobins = false
 
 [lib]
 name = "sts2core"
