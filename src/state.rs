@@ -718,7 +718,6 @@ pub enum St {
     /// 两件用同一个 status，因为在战斗层它们**逐字同一件事**（`CardCmd.Upgrade(手牌)`
     /// 且 `TurnNumber <= 1`）。差别全在**武装条件**：风箱在身上就永远有，
     /// 骨茶有个 `[SavedProperty]` 的「还剩几场」——那是局外状态，
-    /// 走 `content::CONDITIONAL_START` 由调用方给。
     ///
     /// 规则挂在 `Hook::HandDrawn`（抽牌**之后**），不是 `TurnStart`。
     UpgradeOpeningHand,
@@ -732,7 +731,6 @@ pub enum St {
     /// 开局回 N 点血（真品 2 / 假货 1）。层数 = 回多少。
     BloodVial,
     /// 缩放仪（[源码] `Pantograph.BeforeCombatStart`）：**Boss 房**开局回 25 血。
-    /// 「这一场是不是 Boss」是遭遇的属性，走 `content::CONDITIONAL_START`。
     Pantograph,
     /// 古茶具 / 假古茶具（[源码] `VenerableTeaSet`）：**上一个房间是休息处**时
     /// 武装，本场第 1 回合能量回满之后再 +N（真品 2 / 假货 1）。
@@ -748,7 +746,6 @@ pub enum St {
     /// 它是「改一个正在算的数值」那一族（`ModifyXxx`），不是触发器 ——
     /// 消费点是 `step::apply_status` 里一个**只认 status 的**窄 `if`
     /// （和臂甲/坚定不移同一类，登记在 `RULE_MODIFIERS`）。
-    /// 用完当场清零，`content::spent_once_per_combat` 认得它。
     RuinedHelmet,
     // ---- 2026-09-13 第 3 幕补敌人（批 2）。四个都是**观测量**（游戏报成 power），
     //      所以一律进 状态导入层。
@@ -1030,11 +1027,6 @@ impl St {
         St::HandDrawBonus,
     ];
 
-    /// 这个下标叫什么（`St` 自带的 `Debug` 名）。超出 [`St::ALL`] 就是 `None`，
-    /// 调用方印成下标。
-    pub fn name_of_ix(ix: usize) -> Option<String> {
-        Self::ALL.get(ix).map(|st| format!("{st:?}"))
-    }
 }
 
 /// A single card instance. Per-instance modifiers (upgrade, enchants) live here
@@ -1046,7 +1038,6 @@ pub struct CardInst {
     /// 关键字位（`F_*`）。**`u8` 是有意的**：今天只有 5 个位，而窄一个字节
     /// 让 `CardInst` 保持 8 字节 —— 附魔那两个字段（`ench` / `ench_amt`）
     /// 正好补进省下来的地方，`State` 因此**一个字节没涨**。
-    /// 搜索层 也依赖这一点（那里有一条编译期断言）。
     pub flags: u8,
     /// Flat damage bonus from 锋利 (Sharp) style enchants.
     pub bonus: i16,
@@ -1313,30 +1304,6 @@ pub struct State {
 
     pub draw: [u8; MAX_CARDS],
     pub n_draw: u8,
-    /// 抽牌堆**顶部有几张是确定的**（`draw` 数组末尾那几张）。
-    ///
-    /// # 它是给规划层 用的，core 自己一个字都不读
-    ///
-    /// 抽牌堆整体是"顺序不可知"的（约束 2：mod 排过序，观测拿不到真实顺序），
-    /// 但**有几条路径会把牌明确放到顶上**：头槌的「弃牌堆 -> 抽牌堆顶」、
-    /// `Op::PutOnTopOfDraw`。这几张的身份是**确定**的，
-    /// 把它们和底下那堆一起当随机是白白丢信息 —— 机会节点该只对
-    /// 「顶上这几张之外」的部分枚举/采样。
-    ///
-    /// **维护规则只有四条**，全部收口在 `State` 的方法里：
-    /// * 放到顶上（[`State::to_draw_top`]）+1
-    /// * 从顶上拿走（[`State::pop_draw_top`]，**所有取牌堆顶的路径都走它**）−1
-    /// * 洗牌（[`State::reshuffle_discard_into_draw`] / `begin_combat`）归 0
-    /// * 往随机位置插一张（[`State::to_draw_random`]）：插进已知区就把已知区
-    ///   截到插入点以上
-    ///
-    /// **`状态导入` 之后是 0 还是满，取决于 mod 报不报真实牌序**（2026-08-29）：
-    /// * 老口径：`draw_pile` 被 mod 按稀有度+id 排过（约束 2），一张确定的都没有 ⇒ 0
-    /// * 新口径：`draw_pile_order` 报了真实牌序（本地给 mod 打的补丁），
-    ///   整堆都是确定的 ⇒ `n_draw`。机会节点在前缀耗尽之前全部塌缩成确定节点。
-    ///
-    /// 这两种 验证样本 会长期共存（老语料重录不了），所以**别假设它是 0**。
-    pub n_draw_known: u8,
     pub hand: [u8; MAX_CARDS],
     pub n_hand: u8,
     pub disc: [u8; MAX_CARDS],
@@ -1415,16 +1382,7 @@ pub struct State {
     /// 影响的是**"满仓"这个判断**：搜索层的药水定价按"这一幕还会不会再掉药水"
     /// 决定要不要清仓，而 3/3 和 3/5 是两个完全不同的局面。
     pub potion_slots: u8,
-    /// 这一局的**进阶等级**（0–10）。
-    ///
-    /// 战斗层只有两档读得到它，都在 `asc::adjust` / `asc::hp_range` 里收口：
-    /// **A8 `ToughEnemies`** 抬敌人血量/格挡/覆甲，**A9 `DeadlyEnemies`**
-    /// 抬敌人伤害/段数/力量成长。其余八档一律是局外的（药水槽、精英数、
-    /// 金币、商店价、卡牌概率、第 3 幕第二个 Boss），**core 一个都不该读**。
-    ///
-    /// **默认 0，而且 `< 8` 时那两个函数一个字节都不查表** ——
-    /// 所以全部既有校验（都是 A1/A2）逐字节不变。
-    /// `状态导入` 从 验证样本 的 `run.ascension` 灌它；评估层 自己开仗时由调用方给。
+    /// Ascension level used by enemy move scaling (A8/A9 combat modifiers).
     pub ascension: u8,
     /// **知识恶魔那三次二选一怎么选**：第 k 位 = 第 k 次知识的诅咒选瓦解（1）还是另一边（0）。
     ///
@@ -1472,7 +1430,7 @@ impl State {
             n_cards: 0,
             draw: [0; MAX_CARDS],
             n_draw: 0,
-            n_draw_known: 0,
+
             hand: [0; MAX_CARDS],
             n_hand: 0,
             disc: [0; MAX_CARDS],
@@ -1568,17 +1526,11 @@ impl State {
         }
         self.n_draw = self.n_disc;
         self.n_disc = 0;
-        // 洗完之后一张确定的都没有了
-        self.n_draw_known = 0;
         self.regularize_and_shuffle_draw();
     }
 
-    /// 抽牌堆就地洗一次。**所有洗牌都走这一份** —— 规范化排序 + Fisher-Yates，
-    /// 少一处就会让"相同的牌堆多重集 + 相同种子"洗出不同的结果，
-    /// 而配对随机数比较（CRN）和回放验证正是靠这条性质站住的。
-    ///
-    /// 调用方负责 `n_draw_known`：洗完当然一张确定的都没有了，但把它写在这里
-    /// 会让"只想换个顺序"的调用方无从表达。
+    /// 抽牌堆就地洗一次。所有洗牌都走这一份：规范化排序 + Fisher-Yates。
+    /// 相同牌堆多重集和相同 RNG 状态会得到相同的洗牌结果。
     fn regularize_and_shuffle_draw(&mut self) {
         // 先按卡牌指纹规范化排序，保证相同的弃牌多重集在相同 RNG 下产生绝对一致的洗牌结果（CRN）
         let n = self.n_draw as usize;
@@ -1618,7 +1570,6 @@ impl State {
             }
         }
         self.n_disc = 0;
-        self.n_draw_known = 0;
         self.regularize_and_shuffle_draw();
     }
 
@@ -1709,25 +1660,13 @@ impl State {
         c
     }
 
-    /// 从抽牌堆**中间**抽走第 `i` 张（下标 0 是牌堆底，末尾是顶）。
-    ///
-    /// **已知前缀跟着记**：`n_draw_known` 数的是**末尾**那几张，
-    /// 抽走一张不改变其余任何一张的身份 —— 所以只有**抽走的那张本来就在
-    /// 已知区里**时才 −1，抽走已知区下面的那些一张都不影响。
-    /// （写成"截到插入点"是错的：那会把一堆本来知道的牌白白扔成未知。）
-    ///
-    /// 唯一的调用点是宝石面具（`TOp::MoveRandomPowerFromDrawToHandFree`）。
-    /// 抽牌那条路走的是 `pop_draw_top`，两者别混。
+    /// 从抽牌堆中间抽走第 `i` 张（下标 0 是牌堆底，末尾是顶）。
     pub fn take_from_draw(&mut self, i: usize) -> u8 {
         let c = self.draw[i];
-        let known_start = (self.n_draw as usize).saturating_sub(self.n_draw_known as usize);
         for k in i..(self.n_draw as usize - 1) {
             self.draw[k] = self.draw[k + 1];
         }
         self.n_draw -= 1;
-        if i >= known_start {
-            self.n_draw_known = self.n_draw_known.saturating_sub(1);
-        }
         c
     }
 
@@ -1755,32 +1694,20 @@ impl State {
         }
     }
 
-    /// 放到抽牌堆**顶**。放上去的这一张身份是确定的，`n_draw_known` +1。
+    /// 放到抽牌堆顶。
     pub fn to_draw_top(&mut self, c: u8) {
         if (self.n_draw as usize) < MAX_CARDS {
             self.draw[self.n_draw as usize] = c;
             self.n_draw += 1;
-            self.n_draw_known += 1;
         }
     }
 
-    /// 从抽牌堆**顶**拿走一张。
-    ///
-    /// **所有"取牌堆顶"的路径都必须走这里** —— 抽牌、余烬（消耗牌堆顶）、
-    /// 破灭/倾泻（打出牌堆顶）。和 `exhaust_card`、`spawn_card` 是同一个套路：
-    /// 收口的理由是 `n_draw_known`，少更新一处，规划层 就会把一张其实已经
-    /// 不确定的牌当成确定的 —— 而那种错**不会报错，只会让搜索信一个假前提**。
-    ///
-    /// 它**不管洗牌**：什么时候该把弃牌堆洗回来是调用方的语义
-    ///（抽牌要洗、余烬也要洗，但两者的时机判断写在各自那边）。
+    /// 从抽牌堆顶拿走一张。
     pub fn pop_draw_top(&mut self) -> Option<u8> {
         if self.n_draw == 0 {
             return None;
         }
         self.n_draw -= 1;
-        if self.n_draw_known > 0 {
-            self.n_draw_known -= 1;
-        }
         Some(self.draw[self.n_draw as usize])
     }
 
@@ -1802,11 +1729,5 @@ impl State {
         self.draw.copy_within(at..n, at + 1);
         self.draw[at] = c;
         self.n_draw += 1;
-        // 插进了已知区里面 ⇒ 已知区只剩插入点**以上**那几张。
-        // 插在已知区下面则不受影响。
-        let above = (n - at) as u8;
-        if self.n_draw_known > above {
-            self.n_draw_known = above;
-        }
     }
 }

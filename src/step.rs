@@ -23,7 +23,7 @@ pub const MAX_ACTIONS: usize = 128;
 /// 层次照 [源码] `CardEnergyCost.GetWithModifiers`：**本地**改费（这一张实例自己的：免费 / 狂乱逃离的增量 /
 /// 踩踏的减费，都不夹 0）-> **全局**钩子（缠结 +N）-> `Late` 钩子（无情猛攻置 0）-> 最后夹 0 一次。
 /// 缠结为 0 时逐字等于加它之前的样子（免费那一支原来直接 return 0，现在是 `max(0, 0 − 踩踏减的)` = 0）。
-pub fn effective_cost(s: &State, hand_ix: usize) -> i32 {
+fn effective_cost(s: &State, hand_ix: usize) -> i32 {
     let inst = s.cards[s.hand[hand_ix] as usize];
     let d = card(inst.id);
     let base = if inst.upgraded() { d.cost_upg } else { d.cost };
@@ -78,7 +78,7 @@ pub fn tangled_cost_addend(player: &Entity, id: u16) -> i32 {
 ///
 /// **只挡牌，不挡药水** —— `ShouldPlay` 的入参是 `CardModel`。
 #[inline]
-pub fn cards_locked(s: &State) -> bool {
+fn cards_locked(s: &State) -> bool {
     (s.player.get(St::Ringing) > 0 && s.cards_played > 0) || play_cap_reached(s)
 }
 
@@ -90,7 +90,7 @@ pub fn cards_locked(s: &State) -> bool {
 ///
 /// 轰鸣不在这里：它一直只在 `legal_actions` 那一侧，见 `step` 的 `PlayCard`。
 #[inline]
-pub fn play_cap_reached(s: &State) -> bool {
+fn play_cap_reached(s: &State) -> bool {
     let cap = |st: St| s.player.get(st) > 0 && s.cards_played >= s.player.get(st);
     cap(St::Sloth) || cap(St::VelvetChoker)
 }
@@ -123,7 +123,7 @@ pub fn play_cap_reached(s: &State) -> bool {
 ///
 /// 头槌那一支还要**排掉它自己**（`exclude`）：弃牌堆里只剩那一张时，
 /// `legal_actions` 一个候选都给不出来，同样是死局。
-pub fn pending_is_satisfiable(s: &State) -> bool {
+fn pending_is_satisfiable(s: &State) -> bool {
     match s.pending {
         Pending::None => true,
         // 去处是消耗堆 / 抽牌堆顶，都装得下（一张牌只在一个牌区里，
@@ -643,18 +643,6 @@ pub(crate) const MAX_HOOK_DEPTH: u8 = 4;
 /// 没有上下文的钩子（绝大多数）。
 pub(crate) fn fire(s: &mut State, hook: Hook, depth: u8) {
     fire_ctx(s, hook, depth, usize::MAX);
-}
-
-/// Restore a vanished reviving enemy by applying its real death rules in an
-/// isolated state. Player death rewards must not be repeated during 状态导入.
-pub(crate) fn reviving_enemy_snapshot(def: u16, max_hp: i32, adaptable: i32, asc: u8) -> Entity {
-    let mut scratch = State::new(1, 1);
-    scratch.ascension = asc;
-    scratch.add_enemy(def, max_hp);
-    scratch.enemies[0].hp = 0;
-    scratch.enemies[0].set(St::Adaptable, adaptable);
-    fire_ctx(&mut scratch, Hook::EnemyDied, 0, 0);
-    scratch.enemies[0]
 }
 
 /// `ctx` 是"跟这次触发有关的那个敌人"的下标：`Attacked` 用它表示攻击者，
@@ -2701,38 +2689,6 @@ pub fn initial_move(s: &State, e: usize) -> u8 {
     }
 }
 
-/// **这一手在当前局面下，出招机器走不走得到。** 给实况对齐挑签名歧义用
-/// （状态导入层）：两手签名逐字相同时，排掉「进它的边全是条件边、
-/// 而那些条件在当前局面下都确定不成立」的那一手。
-///
-/// 今天唯一的歧义是蜂群术士的喷射信息素（按蜂房层数拆成两手，都是 `Buff`）。
-///
-/// **只会说「走不到」，不会说「一定是它」**：
-/// * 没机器（定环）、有 `Go` / `Rand` 边进它、或者**没有任何边进它**（只能被强制打进去的
-///   击晕 / 醒来那一类）⇒ 一律 `true`
-/// * 条件边判不出来（`ECond::Unknown`）⇒ 算走得到
-///
-/// 对齐那一刻没有出招记录，所以 `Repeat` / `cooldown` 不看、`used` 当 0。
-pub fn move_reachable_now(s: &State, e: usize, def_id: u16, m: usize) -> bool {
-    let def = enemy_def(def_id);
-    let Some(mc) = def.machine else { return true };
-    let empty = [u8::MAX; ENEMY_HIST];
-    let mut saw_cond = false;
-    for n in std::iter::once(mc.start).chain(mc.after.iter().copied()) {
-        match n {
-            Next::Go(i) if i as usize == m => return true,
-            Next::Rand(bs) if bs.iter().any(|b| b.to as usize == m) => return true,
-            Next::Cond(cs) if cs.iter().any(|(_, to)| *to as usize == m) => {
-                saw_cond = true;
-                if resolve_set(s, e, &empty, 0, n) & (1u32 << m) != 0 {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    !saw_cond
-}
 
 /// **开局允许集合**。和 [`allowed_next`] 分开是因为问的是两件事：
 /// 那个问"这一手之后能接什么"，这个问"第一手可能是什么"。
@@ -2954,13 +2910,8 @@ fn enemy_turn(s: &mut State) {
                     }
                     let k = crate::state::next_below(&mut s.rng.gen, total);
                     if k < s.n_draw as usize {
-                        // 抽牌堆里那一张：**已知前缀**只保到被拿走的那一张之上
-                        let above = s.n_draw as usize - 1 - k;
                         s.draw.copy_within(k + 1..s.n_draw as usize, k);
                         s.n_draw -= 1;
-                        if (s.n_draw_known as usize) > above {
-                            s.n_draw_known = above as u8;
-                        }
                     } else {
                         let k = k - s.n_draw as usize;
                         s.disc.copy_within(k + 1..s.n_disc as usize, k);
@@ -3078,15 +3029,7 @@ fn enemy_turn(s: &mut State) {
 // 目前就这三张，各自一个窄 `if`，全部集中注释在这里。**如果这类牌多起来，
 // 该给它们一张像 `POWERS` 那样的表**，而不是继续往 `step.rs` 里塞 `if`。
 
-/// 我的回合开始，**但不抽牌**。
-///
-/// 拆出来是给规划层 用的：机会节点（这一手抽到什么）必须插在
-/// 「敌人打完、回合开始结算做完」和「抽牌」之间，而 `step(EndTurn)` 把这
-/// 一整段做成了一个原子动作。
-///
-/// **拆的方式是"切开"不是"抄一份"**：`start_player_turn` 现在就是
-/// 这个函数加一句 `open_hand`，两条路径不可能长歪。
-/// 和当初为 搜索层加入 `end_turn_with_incoming` 是同一个先例。
+/// Start the player's turn up to, but not including, the opening draw.
 fn start_player_turn_before_draw(s: &mut State) {
     // 我这一边的回合开始，**最早一档**（[源码] `BeforeSideTurnStart`）：
     // 清格挡、能量回满、`TurnStart`（水银沙漏 / 滚石打敌人）全在它后面。见 `Hook::SideTurnStart`。
@@ -3136,46 +3079,25 @@ fn start_player_turn_before_draw(s: &mut State) {
 /// 开局发牌的基础张数（[源码] `CombatManager.SetupPlayerTurn` 里那个 `5m`）。
 pub const BASE_HAND_DRAW: usize = 5;
 
-/// **这一手开局发牌会往手里放几张**（抽牌堆 + 弃牌堆够的话）。
+/// Number of cards drawn for the opening hand of this turn.
 ///
-/// 只在「回合开始、还没发牌」的局面上有意义（`end_turn_before_draw` 的输出）——
-/// `open_hand` 发的就是这个数，**规划层的机会节点也读它**：抽几张是 core 的规则，
-/// 搜索层不应抄一份。2026-09-25 之前机会节点写死 5，心灵腐化那一手实际只抽 4，
-/// 6 张不同的牌逐张进手概率被算成 0 / 2/3 / 5/6 ×4（真值每张 2/3），概率和照样是 1。
-///
-/// 照 [源码] 的顺序：
-///
-/// 1. `Hook.ModifyHandDraw(5)`：佩尔之血 / 准备背包 / 花粉核心 **加**
-///    （它们在 `TurnStart` 上记进 [`St::HandDrawBonus`]），心灵腐化 **减**、到 0 封底；
-/// 2. `ModifyHandDrawLate`：小提琴 +2。**内核把它并进了第 1 步的加张数**，
-///    只在 `5 + 加张数 − 心灵腐化 < 0` 时和源码不同 —— 心灵腐化今天只有 1 层；
-/// 3. `CardPileCmd.Draw`：**手牌上限封顶**，手满了一张都不抽、**也不洗牌**
-///    （`num == 0` 直接返回，在 `ShuffleIfNecessary` 之前）。
-///
-/// 第 1 回合的固有牌（[源码] `Math.Max(handDraw, 固有张数)`）没建：
+/// # First-turn innate cards（[源码] `Math.Max(handDraw, 固有张数)`）没建：
 /// `begin_combat` 只把固有牌挪到牌堆顶，固有牌超过这一手张数时会少发。
-pub fn hand_draw_count(s: &State) -> usize {
+fn hand_draw_count(s: &State) -> usize {
     let n = (BASE_HAND_DRAW as i32 + s.player.get(St::HandDrawBonus) - s.player.get(St::MindRot)).max(0);
     (n as usize).min(MAX_HAND.saturating_sub(s.n_hand as usize))
 }
 
-/// 发开局手牌（[`hand_draw_count`] 张）。**规划层的机会节点就插在它前面。**
-///
-/// 清晰/稳定血清那类「改每回合抽几张」的药水没建，理由在 `ops.rs::POTIONS` 表头 ——
-/// 将来有了，进 `hand_draw_count`。
-pub fn open_hand(s: &mut State) {
+/// Draw the opening hand for the current turn.
+fn open_hand(s: &mut State) {
     let n = hand_draw_count(s);
     s.player.set(St::HandDrawBonus, 0);
     // 走发牌那条路（`hand_draw_n`）：小提琴的抽牌锁不拦开局发牌。
     s.hand_draw_n(n as i32);
-    // 手牌发下来之后才发作的那几件（风箱/骨茶升级手牌）。**必须在这里，
-    // 不能挂 `TurnStart`** —— 那个钩子在抽牌之前，升级的是一手空牌。
+    // 手牌发下来之后再触发需要读取手牌内容的规则。
     fire(s, Hook::HandDrawn, 0);
     // 绯红披风/滚石 可能在这里就把人打死或把敌人打死
     check_over(s);
-    // **抽牌本身就能把一个子选择变成推不动的**（上回合留下来的头槌/涅奥之怒，
-    // 这一手把手牌抽满了）。`open_hand` 是 `step` 之外的一个入口 ——
-    // 规划层的机会节点和 `Leaf::推演层` 都直接调它，见 `close_pending_if_stuck`。
     close_pending_if_stuck(s);
 }
 
@@ -3191,7 +3113,6 @@ fn start_player_turn(s: &mut State) {
 /// 见 验证数据 约束 4），所以外部实时驱动时可以逐字照抄。
 pub type Incoming = [(i32, i32); MAX_ENEMIES];
 
-pub const NO_INCOMING: Incoming = [(0, 0); MAX_ENEMIES];
 
 /// 敌人回合的**注入版**：打多少由调用方给定，内核只负责结算。
 ///
@@ -3299,7 +3220,7 @@ pub fn end_turn_with_incoming(s: State, inc: &Incoming) -> State {
     if s.combat_over {
         return s;
     }
-    end_turn_impl(s, Some((inc, false)), true)
+    end_turn_impl(s, Some((inc, false)))
 }
 
 /// 同 [`end_turn_with_incoming`]，但传进来的是**面板基础值**，每一击的伤害在
@@ -3325,22 +3246,13 @@ pub fn end_turn_with_live_incoming(s: State, base: &Incoming) -> State {
     if s.combat_over {
         return s;
     }
-    end_turn_impl(s, Some((base, true)), true)
+    end_turn_impl(s, Some((base, true)))
 }
 
 fn end_turn(s: State) -> State {
-    end_turn_impl(s, None, true)
+    end_turn_impl(s, None)
 }
 
-/// 结束回合，但**停在抽牌之前**。规划层 用它给机会节点让出位置：
-/// 拿到的局面是「敌人打完、回合开始的结算都做完、手牌还是空的」。
-///
-/// 抽牌自己调 [`open_hand`]。**`end_turn_before_draw` + `open_hand`
-/// 必须逐字节等于 `step(EndTurn)`**，`end_turn_split_equals_the_atomic_one`
-/// 钉着这条 —— 拆出来的东西一旦和原路径分岔，规划层 就在另一个游戏里搜。
-pub fn end_turn_before_draw(s: State) -> State {
-    end_turn_impl(s, None, false)
-}
 
 /// 回合结束时，消耗堆里那些「在消耗堆里就把自己打出来」的牌（彼岸咆哮）。
 ///
@@ -3366,7 +3278,7 @@ fn autoplay_from_exhaust(s: &mut State) {
     }
 }
 
-fn end_turn_impl(mut s: State, inc: Option<(&Incoming, bool)>, open: bool) -> State {
+fn end_turn_impl(mut s: State, inc: Option<(&Incoming, bool)>) -> State {
     // 回合末的**自动打出**阶段。[源码] `CombatManager.EndPlayerTurnPhaseOneInternal`
     // 把 `AutoPostPlay` 排在 `Hook.BeforeTurnEnd` 和弃手牌**之前**，所以它在最前面。
     autoplay_from_exhaust(&mut s);
@@ -3438,12 +3350,8 @@ fn end_turn_impl(mut s: State, inc: Option<(&Incoming, bool)>, open: bool) -> St
         decay(&mut s.enemies[e]);
     }
     start_player_turn_before_draw(&mut s);
-    if open {
-        open_hand(&mut s);
-    }
+    open_hand(&mut s);
     check_over(&mut s);
-    // `end_turn_before_draw`（`open == false`）是规划层的回合边界，
-    // 它不经过 `step` 也不经过 `open_hand` —— 同一条出口收口要自己走一遍。
     close_pending_if_stuck(&mut s);
     s
 }
@@ -3525,8 +3433,6 @@ fn step_inner(mut s: State, a: Action) -> State {
                         // 抽牌堆顶 = `draw` 数组的末尾：`draw_one` 取的是
                         // `n_draw - 1`。放错一头就变成"沉到牌堆底"，
                         // 那是效果完全相反的 bug。
-                        // **走 `to_draw_top` 而不是手写**：那边还要维护
-                        // `n_draw_known`（这一张是确定的）。
                         s.to_draw_top(c);
                         if remaining <= 1 || s.n_disc == 0 {
                             s.pending = Pending::None;
@@ -3722,8 +3628,6 @@ pub fn begin_combat(mut s: State) -> State {
         let j = next_below(&mut s.rng.shuffle, i + 1);
         s.draw.swap(i, j);
     }
-    // 洗完了，顶上一张确定的都没有
-    s.n_draw_known = 0;
     // **固有（`F_INNATE`）的牌挪到牌堆顶**，于是起手必定摸到。
     // 内核的抽牌堆顶在**末尾**（`pop_draw_top` 从末尾取），所以是往后挪。
     //

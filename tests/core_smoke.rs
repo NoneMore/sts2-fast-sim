@@ -31,3 +31,11 @@ fn illegal_play_is_a_noop() {
     let after = step(s, Action::PlayCard { hand: 0, target: 0 });
     assert_eq!(after, s);
 }
+
+#[test]
+fn state_stays_small_copy_value() {
+    assert!(std::mem::size_of::<State>() <= 4096);
+    let s = State::new(80, 42);
+    let _copy = s;
+    let _second_copy = s;
+}

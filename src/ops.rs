@@ -1315,25 +1315,7 @@ impl EnchVal {
     }
 }
 
-/// 一种**附魔**（[源码] `EnchantmentModel`）。一张牌至多带一个，挂在**卡实例**上
-/// （`CardInst::ench` / `ench_amt`），所以牌组里三张打击可以只有一张带。
-///
-/// # 这张表的形状 = `EnchantmentModel` 的虚方法表
-///
-/// 源码里附魔**只有六个口子**能改游戏：`EnchantBlockAdditive` /
-/// `EnchantBlockMultiplicative` / `EnchantDamageAdditive` /
-/// `EnchantDamageMultiplicative` / `EnchantPlayCount`，外加 `OnEnchant`（改关键字
-/// 和费用）和 `OnPlay`（打出时多做一件事）。
-///
-/// **这张表只装内核今天真的消费的那几个**（格挡加、伤害加、伤害乘、关键字）。
-/// 其余的口子**没有字段** —— 加一个没人读的字段和加一个空钩子是同一种错：
-/// 它看起来像建好了。装不下的附魔一律 `modelled: false`，
-/// `replay` 会把它们点名进 `Report::unknown_enchantments`。
-///
-/// # `modelled: false` 不等于"没效果"
-///
-/// 它等于"内核会**算错**这张牌，而且知道自己在算错"。`--live` 把它们列出来，
-/// 校验不会静默放过。
+/// Static enchantment effects attached to a card instance.
 pub struct EnchantDef {
     /// 游戏 id（大写下划线），和观测里 `enchantment.id` 逐字对齐
     pub id: &'static str,
@@ -1347,56 +1329,18 @@ pub struct EnchantDef {
     pub damage_mul: (i32, i32),
     /// `OnEnchant` 给这张牌永久加的关键字（`F_INNATE` / `F_RETAIN`）
     pub keywords: u8,
-    /// 内核是否**完整**建了这一个（差一个口子就是 false）
-    pub modelled: bool,
-    /// 没建的那部分卡在哪。建全了的写依据
-    pub note: &'static str,
 }
 
-/// 一个遗物。`start_status` 是它在**战斗开始时**给玩家挂的 status，
-/// 规则本身写在 `content::POWERS` 里（和能力牌同一套机器）。
-///
-/// `start_status` 为空**不等于**没效果，可能是：
-/// * 局外遗物（白银熔炉）—— 本来就不该进战斗层，`modelled` 为 true
-/// * 还没建模 —— `modelled` 为 false，`--live` 会把它点名报出来
-///
-/// 这个区分很实际：内核**必须能说出"我不认识这个遗物"**，
-/// 否则它连"我可能算错了"都讲不出来 —— 那正是遗物今天的处境。
+/// Combat-relevant relic state applied when constructing a combat.
 pub struct RelicDef {
-    /// 游戏内部 id，如 `BURNING_BLOOD`
     pub id: &'static str,
     pub name: &'static str,
-    /// 战斗开始时挂上的、**游戏也会报**的 status（金刚杵的力量、护喉甲的覆甲）。
-    ///
-    /// **校验路径上不许用它，也不需要用它** —— 观测里本来就有这些量。
-    /// 早先这一栏和 `private_status` 是同一个字段，一起进 `relic_carry`
-    /// 每帧 `set` 回去；那样加一件金刚杵就会**把力量钉死在 1**，
-    /// 药水/撕裂/内脏撕裂加的力量全部被覆盖掉。
-    ///
-    /// 它的用处在**内核自己开一场仗**的时候（评估层的推演、合成 验证样本），
-    /// 那时没有观测可抄。`relic_start_status_is_observable` 守着"这一栏里的
-    /// status 必须是观测能映射到的"。
+    /// Observable combat-start statuses.
     pub start_status: &'static [(St, i32)],
-    /// 内核**私有**的记账，游戏根本不报（臂甲的 `VambraceCharge`）。
-    ///
-    /// 和上面那栏的处置**正好相反**：必须由 `relic_carry` 逐帧带着走
-    /// （游戏不报 ⇒ 每帧重新初始化的话，内核会以为臂甲每帧都还能翻倍），
-    /// 而且**不许出现在 状态导入层** —— 进去了校验会每帧报一个
-    /// 游戏里根本不存在的 status。两个测试各守一半。
+    /// Internal per-combat bookkeeping statuses.
     pub private_status: &'static [(St, i32)],
-    /// 这件遗物**面板上那个计数器**该灌进哪个 status。
-    ///
-    /// 有些遗物的状态**跨战斗保留**（摆动球的 `TurnsSeen` 带 `[SavedProperty]`），
-    /// 战斗开始时它不是 0，而是上一场留下的值。假设它从 0 开始就会**系统性
-    /// 错相位** —— 那是"自信地算错"，比不建模更糟。
-    ///
-    /// 好在游戏把它显示在遗物上（`ShowCounter` / `DisplayAmount`），
-    /// 录制器一直就把 `counter` 写进 验证样本 了。这里只是把它接上。
+    /// Optional persistent relic counter mapped into a status by the caller.
     pub counter_to: Option<St>,
-    /// 战斗层的行为**是否已经建模到位**（局外遗物也算 true —— 它们不欠战斗层什么）
-    pub modelled: bool,
-    /// 为什么没建模 / 建模依据。空串表示不需要说明
-    pub note: &'static str,
 }
 
 /// 一段 `Op` 是**从哪儿发出来的**。

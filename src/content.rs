@@ -1846,7 +1846,6 @@ pub static POWERS: &[PowerDef] = &[
     },
     // 缩放仪：[源码] `Pantograph.BeforeCombatStart`，条件是
     // `CurrentRoom.RoomType == Boss` -> 回 25 血。房间类型是遭遇的属性，
-    // 武装走 `CONDITIONAL_START`（调用方给），效果本身和小血瓶同构。
     PowerDef {
         st: St::Pantograph,
         hook: Hook::TurnStart,
@@ -2173,7 +2172,6 @@ pub static POWERS: &[PowerDef] = &[
     // 钻石头冠：我的回合末（`BeforeSideTurnEnd`）本回合出牌 ≤ 2 ⇒ 挂上减半的那个 power；
     // 敌人回合末（[源码] `DiamondDiademPower.AfterSideTurnEnd(Enemy)`）摘掉。
     // **两条都挂在头冠本体上**，不给那个 power 自己开规则 —— 挂在它身上的 `ClearSelf`
-    // 会让 `spent_once_per_combat` 把它认成「一场一次」。减半本身在 `damage.rs`。
     PowerDef {
         st: St::DiamondDiadem,
         hook: Hook::TurnEnd,
@@ -3648,79 +3646,56 @@ pub static HAND_END: &[HandEndDef] = &[
 ];
 
 // ---------------- 遗物 ----------------
-//
-// **这张表只放"内核对它有话可说"的遗物**，不是 55 个全灌。
-// 权威全表在 `traces/relics_catalog.json`（验证数据 导出，
-// 55/55 全部拿到），要建模时从那里抄，不用再联网。
-//
-// 为什么不全灌：上一次一次性灌 54 张牌，结果本文档自己写着
-// 「没验证过的内容已经是验证过的三倍多，这个比例本身就是风险」。
-// 遗物按"这一局身上有的 + 以后真遇到的"增量加。
-//
-// 表里没有的遗物**不会被当成没效果** —— `--live` 会拿观测里的名字把它们
-// 点名报出来（见 验证数据）。内核必须能说出"我不认识这个"。
-
+// Only the fields on `RelicDef` participate in combat construction.
 pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "MANGO", name: "芒果",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "[源码] 拾取时最大生命 +14；战斗观测已含，不重复施加",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "BING_BONG", name: "宾邦",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "[源码] 新加入主牌组的牌复制一张；局外效果，主牌组快照已含",
+        start_status: &[], private_status: &[], counter_to: None,
     },
-    // ---- 局外：不属于战斗层，内核不欠它们什么，所以 modelled = true ----
     RelicDef {
         id: "SILVER_CRUCIBLE", name: "白银熔炉",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：前3次卡牌奖励升级 + 第一个宝箱为空。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PAELS_WING", name: "佩尔之翼",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：卡牌奖励献祭换遗物。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "ARCANE_SCROLL", name: "奥术卷轴",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时把一张随机稀有牌加进牌组。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "WAR_PAINT", name: "战纹涂料",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时随机升级 2 张技能牌。升级结果进牌组，战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "WHETSTONE", name: "磨刀石",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时随机升级 2 张攻击牌。升级结果进牌组，战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "MEAL_TICKET", name: "餐券",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：进商店回 15 点生命。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "STORYBOOK", name: "故事书",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时把 1 张至亮之焰加进牌组。那张牌本身在内容表里",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // [源码] `LetterOpener`：同回合每 3 张技能牌 -> 全体 5 点（Unpowered）。
     // 层数 = 伤害；「每 3 张」写在规则的 TCond 里。
     RelicDef {
         id: "LETTER_OPENER", name: "开信刀",
         start_status: &[], private_status: &[(St::LetterOpener, 5)],
-        counter_to: None, modelled: true,
-        note: "同回合每 3 张技能牌对全体 5 点。层数=伤害，计数在 State::skills_played",
+        counter_to: None,
     },
     // ---- 2026-08-27 第二批：战斗层，规则在 POWERS ----
     RelicDef {
         id: "ANCHOR", name: "锚",
         start_status: &[], private_status: &[(St::Anchor, 10)],
-        counter_to: None, modelled: true,
-        note: "战斗开始 10 点格挡（Unpowered）。层数=格挡值",
+        counter_to: None,
     },
     // 假商人卖的「锚？？？」。**id 不同**（`FAKE_ANCHOR`），数值也不同：
     // [源码] `FakeAnchor` 是 `BlockVar(4)`，真锚是 10。规则完全一样，
@@ -3731,247 +3706,202 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "FAKE_ANCHOR", name: "锚？？？",
         start_status: &[], private_status: &[(St::Anchor, 4)],
-        counter_to: None, modelled: true,
-        note: "假商人版：战斗开始 4 点格挡（真锚是 10）",
+        counter_to: None,
     },
     // 2026-08-30：权威表重导（93 -> 94）之后补齐的 5 件。
     // 四件假货 + 坦克斯的哨子（这一局身上就带着，`--live` 一直在报"内容表里没有"）。
     RelicDef {
         id: "TANXS_WHISTLE", name: "坦克斯的哨子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时把 1 张吹哨加进牌组。那张牌进牌组之后就是普通牌，战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "FAKE_BLOOD_VIAL", name: "小血瓶？？？",
         start_status: &[], private_status: &[(St::BloodVial, 1)],
-        counter_to: None, modelled: true,
-        note: "假商人版：开局回 1 血（真品 2）。和真品同一条规则，层数不同",
+        counter_to: None,
     },
     RelicDef {
         id: "FAKE_HAPPY_FLOWER", name: "开心小花？？？",
         start_status: &[], private_status: &[(St::FakeHappyFlower, 1)],
-        counter_to: None, modelled: true,
-        note: "假商人版：每 5 回合 +1 能量（真品每 3 回合）。周期不同，所以单独一条规则",
+        counter_to: None,
     },
     RelicDef {
         id: "FAKE_MANGO", name: "芒果？？？",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时最大生命 +3（真品 +5）。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "FAKE_SNECKO_EYE", name: "异蛇之眼？？？",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "假商人版：每场战斗开始获得混乱（真品还多抽 2 张）。欠**混乱** ——                「手牌费用随机化」要给 CardInst 加一条本场随机费用，内核没有这个概念",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "FAKE_VENERABLE_TEA_SET", name: "古茶具套装？？？",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "假商人版：休息后第一场战斗 +1 能量（真品 +2）。和真品同一条路，见 REST_ARMED",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "BAG_OF_MARBLES", name: "弹珠袋",
         start_status: &[], private_status: &[(St::BagOfMarbles, 1)],
-        counter_to: None, modelled: true,
-        note: "第1回合给全体易伤 1",
+        counter_to: None,
     },
     RelicDef {
         id: "RED_MASK", name: "红面具",
         start_status: &[], private_status: &[(St::RedMask, 1)],
-        counter_to: None, modelled: true,
-        note: "第1回合给全体虚弱 1",
+        counter_to: None,
     },
     RelicDef {
         id: "BAG_OF_PREPARATION", name: "准备背包",
         start_status: &[], private_status: &[(St::BagOfPreparation, 2)],
-        counter_to: None, modelled: true,
-        note: "第1回合多抽 2 张",
+        counter_to: None,
     },
     RelicDef {
         id: "CANDELABRA", name: "烛台",
         start_status: &[], private_status: &[(St::Candelabra, 2)],
-        counter_to: None, modelled: true,
-        note: "第2回合开始 +2 能量（源码是 ==2，不是 >=2）",
+        counter_to: None,
     },
     RelicDef {
         id: "HAPPY_FLOWER", name: "开心小花",
         start_status: &[], private_status: &[(St::HappyFlower, 1)],
-        counter_to: None, modelled: true,
-        note: "每 3 回合 +1 能量",
+        counter_to: None,
     },
     RelicDef {
         id: "POLLINOUS_CORE", name: "花粉核心",
         start_status: &[], private_status: &[(St::PollinousCore, 2)],
-        counter_to: None, modelled: true,
-        note: "每 4 回合多抽 2 张",
+        counter_to: None,
     },
     RelicDef {
         id: "PAELS_FLESH", name: "佩尔之肉",
         start_status: &[], private_status: &[(St::PaelsFlesh, 1)],
-        counter_to: None, modelled: true,
-        note: "第3回合起每回合 +1 能量",
+        counter_to: None,
     },
     RelicDef {
         id: "PAELS_BLOOD", name: "佩尔之血",
         start_status: &[], private_status: &[(St::PaelsBlood, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] `ModifyHandDraw => count + 1`：每回合起手多抽 1 张，无条件",
+        counter_to: None,
     },
     RelicDef {
         id: "KUNAI", name: "苦无",
         start_status: &[], private_status: &[(St::Kunai, 1)],
-        counter_to: None, modelled: true,
-        note: "同回合每 3 张攻击牌 +1 敏捷（第3/6/9张都给）",
+        counter_to: None,
     },
     // ---- 2026-08-27 第二批：局外，战斗层不欠它们什么 ----
     RelicDef {
         id: "BOWLER_HAT", name: "圆顶礼帽",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：金币 +25%",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "DRAGON_FRUIT", name: "火龙果",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：获得金币时 +1 最大生命",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "ETERNAL_FEATHER", name: "永恒羽毛",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：休息处按牌组张数回血",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "FUR_COAT", name: "皮草大衣",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时标记 7 处战斗，那些敌人只有 1 血。改的是遭遇不是规则",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "GIRYA", name: "壶铃",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：休息处换力量（最多3次）。换来的力量是观测量，同步就带进来了",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "JUZU_BRACELET", name: "佛珠手链",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：问号房不再遇到常规战斗",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "LEES_WAFFLE", name: "李家华夫饼",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时 +7 最大生命并回满",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "NEOWS_BONES", name: "涅奥骨骰",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时给 2 件涅奥遗物 + 1 张随机诅咒",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "ORRERY", name: "星系仪",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时给 5 次卡牌奖励",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PAELS_HORN", name: "佩尔之角",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时塞 2 张放松。**那张牌内核还没有**，见缺牌清单",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PANTOGRAPH", name: "缩放仪",
         start_status: &[], private_status: &[],
-        counter_to: None, modelled: true,
-        note: "Boss 房开局回 25 血。规则在 POWERS；'这一场是不是 Boss'走 CONDITIONAL_START",
+        counter_to: None,
     },
     RelicDef {
         id: "PHIAL_HOLSTER", name: "药瓶皮套",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时 +1 药水栏 + 2 瓶随机药水",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "REGAL_PILLOW", name: "皇家枕头",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：休息多回 15 血",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "SHOVEL", name: "铲子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：休息处挖遗物",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "STRAWBERRY", name: "草莓",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时 +7 最大生命",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "SWORD_OF_STONE", name: "石之剑",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：打完 5 个精英后变成别的遗物",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "WINGED_BOOTS", name: "羽翼之靴",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：3 次无视路线",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "WING_CHARM", name: "羽翼护符",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：卡牌奖励里随机一张附魔迅捷1",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "DELICATE_FROND", name: "娇嫩蕨草",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：每场战斗开始把空药水栏填满。药水本身在内核里，填栏位是局外经济",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "CHOSEN_CHEESE", name: "天选芝士",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：战斗结束 +1 最大生命。结算在战斗之后，L1 不欠",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // ---- 2026-08-27 第二批：战斗层但**还没建**，每条写明卡在哪 ----
     RelicDef {
         id: "BELT_BUCKLE", name: "腰带扣",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "没有药水时 +2 敏捷。欠「身上还有没有药水」这个**动态**条件（喝完当场生效）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "CHEMICAL_X", name: "化学物X",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "X 费牌效果 +2。欠给 X 加常数的那一处（X 在 step 里当场算）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "GHOST_SEED", name: "幽灵种子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "打击和防御获得虚无。欠**附魔系统**（改的是牌不是玩家）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 下面三件是同一个形状：**效果全在局外**（拾起的那一刻给牌附魔），
     // 战斗层由 `CardInst` 上的附魔承载，而附魔是**观测量**（mod 每帧都报）。
     // 所以内核该不该"建"这几件遗物，取决于它给的那种附魔建全了没有。
     RelicDef {
         id: "GNARLED_HAMMER", name: "扭曲锤子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时给至多 3 张攻击牌附魔锋利3。战斗层由 `ENCHANTS` 的 SHARP 承载",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "KIFUDA", name: "木札",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "局外：拾起时附魔娴熟（`ADROIT`）—— 而那一种还没建全（欠附魔侧的 OnPlay）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "ROYAL_STAMP", name: "王室印章",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时附魔王室认证。战斗层由 `ENCHANTS` 的 ROYALLY_APPROVED 承载（固有+保留）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "MYSTIC_LIGHTER", name: "神秘打火机",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "有附魔的攻击牌 +9 伤害。欠附魔系统",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "INTIMIDATING_HELMET", name: "骇人头盔",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "打出费用≥2的牌 +4 格挡。欠「刚打出的这张牌费用是多少」这个条件",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PERMAFROST", name: "永冻冰晶",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "本场第一次打出能力牌 +7 格挡。欠「这张是能力牌」的条件（一次性用 ClearSelf 已经能表达）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 钢笔尖：`ModifyXxx` 那一族（"改一个正在算的数值"）**第一件建掉的**。
     //
@@ -3986,107 +3916,85 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "PEN_NIB", name: "钢笔尖",
         start_status: &[], private_status: &[(St::PenNib, 1)],
-        counter_to: Some(St::PenNibCount), modelled: true,
-        note: "[源码] 每第 10 张攻击牌 ×2（`ModifyDamageMultiplicative`，带 IsPoweredAttack 门）",
+        counter_to: Some(St::PenNibCount),
     },
     RelicDef {
         id: "PAPER_PHROG", name: "纸蛙",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "易伤改成 +75%。欠改伤害管线乘区的开关（damage.rs 那处不许随手改）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "RAZOR_TOOTH", name: "剃刀牙",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "打出的攻击/技能牌本场升级。欠「把这张牌实例本场升级」（升级是换 ops，不是加 bonus）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "RED_SKULL", name: "红头骨",
-        start_status: &[], private_status: &[(St::RedSkull, 3)], counter_to: None, modelled: true,
-        note: "[源码+实测] 血量≤50% 时 +3 力量；回血越过阈值时移除。观测力量已含加成",
+        start_status: &[], private_status: &[(St::RedSkull, 3)], counter_to: None,
     },
     // ---- 2026-09-09 第三批：新一局第 1 幕捡到的六件 ----
     // 三件局外（战斗层不欠它们什么），两件战斗层，一件只在战斗构造路径上欠。
     RelicDef {
         id: "LEAFY_POULTICE", name: "叶子药膏",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] AfterObtained 最大生命 −12，把一张打击和一张防御各变形成别的牌。
-               产物进牌组，战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "FROZEN_EGG", name: "冰冻蛋",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] 卡牌奖励/商店里的**能力牌**自动升级。升级结果进牌组，战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "SIGNET_RING", name: "图章戒指",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] AfterObtained 给 999 金币。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 斗篷扣：[源码] `CloakClasp.BeforeSideTurnEnd` -> `(int)(手牌张数 × 1)` 点格挡。
     // 规则在 POWERS 的 `Hook::TurnEnd`（和尖叫酒壶同一个时点：弃手牌之前）。
     RelicDef {
         id: "CLOAK_CLASP", name: "斗篷扣",
         start_status: &[], private_status: &[(St::CloakClasp, 1)],
-        counter_to: None, modelled: true,
-        note: "回合结束时每张手牌给 1 点格挡。层数=每张给几点，规则在 POWERS 的 TurnEnd",
+        counter_to: None,
     },
     // 号角靴钉：[源码] `HornCleat.AfterBlockCleared` 且 `TurnNumber == 2` -> 14 格挡。
     RelicDef {
         id: "HORN_CLEAT", name: "号角靴钉",
         start_status: &[], private_status: &[(St::HornCleat, 14)],
-        counter_to: None, modelled: true,
-        note: "第 2 回合开始获得 14 点格挡。层数=格挡，规则在 POWERS 的 TurnStart + TurnIs(2)",
+        counter_to: None,
     },
     // 碎石者：[源码] `StoneCracker.AfterRoomEntered(CombatRoom)` ——
     // 从**抽牌堆**随机挑 2 张可升级的牌升级。和风箱同类：校验路径上牌是观测量
-    // （`状态导入` 照抄升级态），**战斗构造路径没有观测可抄** ⇒ `SYNTH_ONLY_GAPS`。
     RelicDef {
         id: "STONE_CRACKER", name: "碎石者",
         start_status: &[], private_status: &[(St::StoneCracker, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] AfterRoomEntered(CombatRoom)：抽牌堆里随机 2 张可升级的牌升级。
-               规则在 POWERS 的 TurnStart；状态导入路径上牌是观测量，那边不挂",
+        counter_to: None,
     },
     RelicDef {
         id: "REPTILE_TRINKET", name: "爬行动物饰品",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "用药水时本回合 +3 力量。欠 Hook::PotionUsed",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 损毁头盔 2026-09-09 建了。它欠的「施加 status 时插一手」不需要新钩子 ——
     // 出路和钢笔尖同一条：**遗物把状态交给玩家实体**，规则那一侧只认 status
     // （`step::modify_status_amount_received`，登记在 `RULE_MODIFIERS`）。
-    // 「一场只用一次」由 `spent_once_per_combat` 认（用掉当场清零）。
     RelicDef {
         id: "RUINED_HELMET", name: "损毁头盔",
         start_status: &[], private_status: &[(St::RuinedHelmet, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] 本场第一次获得力量时层数 ×2（只认给自己的、只认正数）。
-               [实测] 2026-09-09 金刚杵 1 点 -> 观测到 2 点",
+        counter_to: None,
     },
     RelicDef {
         id: "SLING_OF_COURAGE", name: "勇气投石索",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "精英战 +2 力量。欠「这场是不是精英」——房间类型不在 L1 里",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "STRIKE_DUMMY", name: "打击木偶",
-        start_status: &[], private_status: &[(St::StrikeDummy, 3)], counter_to: None, modelled: true,
-        note: "[源码+实测] CardTag.Strike 的有源攻击 +3，位于乘区之前",
+        start_status: &[], private_status: &[(St::StrikeDummy, 3)], counter_to: None,
     },
     RelicDef {
         id: "THE_ABACUS", name: "算盘",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "每次洗抽牌堆 +6 格挡。欠 Hook::Shuffle（洗牌已收口在 regularize_and_shuffle_draw，加钩子不难）",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "TOOLBOX", name: "工具箱",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "战斗开始从 3 张无色牌里挑 1 张。欠「从生成的候选里选」那种 Pending，和无色药水同一个",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "UNSETTLING_LAMP", name: "不安油灯",
-        start_status: &[], private_status: &[], counter_to: None, modelled: false,
-        note: "本场第一次给负面状态时效果翻倍。欠「施加 status 时插一手」的钩子",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 古茶具 2026-09-09 建了。它欠的「上一个房间是不是休息处」**不在 core 里，
     // 但在评估层 手上** —— 整幕链自己知道在模拟哪个房间。所以规则进 `POWERS`，
@@ -4094,9 +4002,7 @@ pub static RELICS: &[RelicDef] = &[
     // **校验路径一个字节不变**：那边 `energy` 从观测灌，这个 status 不挂。
     RelicDef {
         id: "VENERABLE_TEA_SET", name: "古茶具套装",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "休息后的第一场战斗 +2 能量。规则在 POWERS 的 TurnStart；
-               武装要调用方给「上一场是不是休息处」，见 REST_ARMED",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // ---- 战斗层，**已建模** ----
     // [源码] `ParryingShield`：我的回合结束、格挡 ≥ 10 -> 随机一只敌人 6 点。
@@ -4104,8 +4010,7 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "PARRYING_SHIELD", name: "招架盾",
         start_status: &[], private_status: &[(St::ParryingShield, 6)],
-        counter_to: None, modelled: true,
-        note: "回合结束时格挡≥10 则随机敌人 6 点。层数=伤害，门槛在 TCond 里",
+        counter_to: None,
     },
     // [源码] `ScreamingFlagon`：我的回合结束、手牌为空 -> 全体敌人 20 点（Unpowered）。
     // 规则在 POWERS 的 `Hook::TurnEnd`，层数 = 伤害。
@@ -4117,8 +4022,7 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "SCREAMING_FLAGON", name: "尖叫酒壶",
         start_status: &[], private_status: &[(St::ScreamingFlagon, 20)],
-        counter_to: None, modelled: true,
-        note: "回合结束手牌为空则全体敌人 20 点。层数=伤害，时点门槛在 TCond::HandEmpty",
+        counter_to: None,
     },
     // [源码] `CentennialPuzzle`：本场**第一次**真掉血 -> 抽 3。
     // **内核只在攻击伤害那条路上点火**（`take_attack_hit`），比游戏窄一点，
@@ -4126,8 +4030,7 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "CENTENNIAL_PUZZLE", name: "百年积木",
         start_status: &[], private_status: &[(St::CentennialPuzzle, 3)],
-        counter_to: None, modelled: true,
-        note: "本场第一次掉血抽 3 张。一次性靠规则里的 ClearSelf",
+        counter_to: None,
     },
     // ---- 战斗层，但**还没建模**。每条写明卡在哪 ----
     // [实测] 历史验证样本 帧1：防御+（基础 8）给出 16。
@@ -4138,8 +4041,6 @@ pub static RELICS: &[RelicDef] = &[
         // 充能是**内核私有**的：游戏不报"这场臂甲用过没有"，所以必须 carry。
         start_status: &[], private_status: &[(St::VambraceCharge, 1)],
         counter_to: None,
-        modelled: true,
-        note: "首次从卡牌获得的格挡翻倍。**和脆弱的先后顺序未实测**，取了不高估玩家的那边",
     },
     // [实测] 历史验证样本 帧1：熔融之拳+ 打死闪光贾克斯果之后，
     // 能量 0 -> 1、手牌 3 -> 4。补这件之前那一帧是个真 MISMATCH。
@@ -4147,8 +4048,7 @@ pub static RELICS: &[RelicDef] = &[
         id: "GREMLIN_HORN", name: "地精之角",
         // 游戏不把它报成 status ⇒ 私有量，逐帧 carry，不进 外部状态字段集合
         start_status: &[], private_status: &[(St::GremlinHorn, 1)],
-        counter_to: None, modelled: true,
-        note: "敌人死亡时 +1 能量并抽 1 张牌。规则在 POWERS 的 Hook::EnemyDied",
+        counter_to: None,
     },
     // [实测] 第2幕第24/27层：回合1打1点、回合2打2点、回合3打3点，
     // 对场上**每一只**敌人（含刚被召唤出来的三只卵）。
@@ -4156,19 +4056,16 @@ pub static RELICS: &[RelicDef] = &[
         id: "MR_STRUGGLES", name: "抱抱先生",
         // 游戏不把遗物报成 status ⇒ 私有量，逐帧 carry，不进 外部状态字段集合
         start_status: &[], private_status: &[(St::MrStruggles, 1)],
-        counter_to: None, modelled: true,
-        note: "回合开始对全体造成等于回合数的伤害。规则在 POWERS 的 Hook::TurnStart",
+        counter_to: None,
     },
     RelicDef {
         id: "CAPTAINS_WHEEL", name: "舵盘",
         start_status: &[], private_status: &[(St::CaptainsWheel, 18)],
-        counter_to: None, modelled: true,
-        note: "第3回合开始 +18 格挡。Unpowered，所以不吃脆弱也不吃臂甲翻倍",
+        counter_to: None,
     },
     RelicDef {
         id: "POTION_BELT", name: "药水腰带",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "+2 药水栏位。槽位数现在是**观测量** `State::potion_slots`（游戏在 \n               player.max_potion_slots 里直接报），所以这件遗物不需要战斗层建模 —— \n               改槽位的还有炼金宝匣 +4、药瓶皮套 +1，高进阶初始 3→2，反推一定会错",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // ---- 战斗胜利结算（2026-08-20 建模）。规则在 `POWERS`，层数 = 回血量 ----
     //
@@ -4179,40 +4076,32 @@ pub static RELICS: &[RelicDef] = &[
         id: "BURNING_BLOOD", name: "燃烧之血",
         start_status: &[], private_status: &[(St::BurningBlood, 6)],
         counter_to: None,
-        modelled: true,
-        note: "战斗胜利回6。铁甲战士自带，每局开局就有。[源码] AfterCombatVictory，玩家死了不触发",
     },
     RelicDef {
         id: "MEAT_ON_THE_BONE", name: "带骨肉",
         start_status: &[], private_status: &[(St::MeatOnTheBone, 12)],
         counter_to: None,
-        modelled: true,
-        note: "战斗胜利时血量≤max/2（向下取整）则回12。**在燃烧之血之前结算**，所以阈值不含那6点",
     },
 
     // ---- 第 4 期：战斗内触发式。规则在 `POWERS`，层数 = 每次触发的效果值 ----
     RelicDef {
         id: "ORNAMENTAL_FAN", name: "精致折扇",
-        start_status: &[], private_status: &[(St::OrnamentalFan, 4)], counter_to: None, modelled: true,
-        note: "同回合每第3张攻击牌给4格挡。[源码] 是 %3==0，第6/9张也给；格挡 Unpowered，不吃脆弱/臂甲",
+        start_status: &[], private_status: &[(St::OrnamentalFan, 4)], counter_to: None,
     },
     RelicDef {
         id: "MERCURY_HOURGLASS", name: "水银沙漏",
-        start_status: &[], private_status: &[(St::MercuryHourglass, 3)], counter_to: None, modelled: true,
-        note: "回合开始对全体3点。[源码] Unpowered，不吃力量",
+        start_status: &[], private_status: &[(St::MercuryHourglass, 3)], counter_to: None,
     },
     RelicDef {
         id: "LANTERN", name: "灯笼",
-        start_status: &[], private_status: &[(St::Lantern, 1)], counter_to: None, modelled: true,
-        note: "第一回合+1能量。[源码] 是 TurnNumber <= 1，不是 == 1",
+        start_status: &[], private_status: &[(St::Lantern, 1)], counter_to: None,
     },
     // 赤牛：每场战斗开始（[源码] 实为**第一回合开始**，`TurnNumber <= 1`）获得 8 活力。
     // 私有量：游戏把活力报成 `VIGOR_POWER`（那个进 外部状态字段集合），但"赤牛给几点"
     // 这个配置值游戏不报，和灯笼的 1 点能量同一类。
     RelicDef {
         id: "AKABEKO", name: "赤牛",
-        start_status: &[], private_status: &[(St::Akabeko, 8)], counter_to: None, modelled: true,
-        note: "第一回合开始 +8 活力。活力=下一张攻击牌的加法加值，**多段牌每段都吃满**（[源码] 钩子在多段循环外）",
+        start_status: &[], private_status: &[(St::Akabeko, 8)], counter_to: None,
     },
     // 石化蟾蜍：[源码] `PetrifiedToad.BeforeCombatStartLate` -> `PotionCmd.TryToProcure<PotionShapedRock>`。
     //
@@ -4222,25 +4111,20 @@ pub static RELICS: &[RelicDef] = &[
     // 见 `ops.rs::POTIONS` 的 `药水形状的石头`。
     RelicDef {
         id: "PETRIFIED_TOAD", name: "石化蟾蜍",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "开局塞一瓶药水形状的石头。药水槽是观测量，所以战斗层无关；那瓶药水在 POTIONS 里",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PENDULUM", name: "摆动球",
         start_status: &[], private_status: &[(St::Pendulum, 1)],
         counter_to: Some(St::PendulumPhase),
-        modelled: true,
-        note: "每3回合抽1张。**相位跨战斗保留**（[源码] TurnsSeen 带 SavedProperty），所以从观测的计数器灌相位，别假设从0开始",
     },
     RelicDef {
         id: "STONE_CALENDAR", name: "历石",
-        start_status: &[], private_status: &[(St::StoneCalendar, 52)], counter_to: None, modelled: true,
-        note: "第7回合结束对全体52点",
+        start_status: &[], private_status: &[(St::StoneCalendar, 52)], counter_to: None,
     },
     RelicDef {
         id: "ORICHALCUM", name: "奥利哈钢",
-        start_status: &[], private_status: &[(St::Orichalcum, 6)], counter_to: None, modelled: true,
-        note: "回合结束无格挡则+6。**两段式**：TurnEndVeryEarly 快照、TurnEnd 结算，因为覆甲在第二段给格挡",
+        start_status: &[], private_status: &[(St::Orichalcum, 6)], counter_to: None,
     },
 
     // ---- 战斗开始挂 status。**注意：这几件在校验路径上收益为零** ----
@@ -4251,23 +4135,19 @@ pub static RELICS: &[RelicDef] = &[
     // 而且 `relic_carry` **不会**碰它们（碰了就会把力量钉死，见 RelicDef 的注释）。
     RelicDef {
         id: "VAJRA", name: "金刚杵",
-        start_status: &[(St::Strength, 1)], private_status: &[], counter_to: None, modelled: true,
-        note: "每场战斗开始获得1点力量",
+        start_status: &[(St::Strength, 1)], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "GORGET", name: "护喉甲",
-        start_status: &[(St::PlatedArmor, 4)], private_status: &[], counter_to: None, modelled: true,
-        note: "每场战斗开始获得4层覆甲",
+        start_status: &[(St::PlatedArmor, 4)], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "ODDLY_SMOOTH_STONE", name: "意外光滑的石头",
-        start_status: &[(St::Dexterity, 1)], private_status: &[], counter_to: None, modelled: true,
-        note: "每场战斗开始获得1点敏捷",
+        start_status: &[(St::Dexterity, 1)], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "BRONZE_SCALES", name: "铜质鳞片",
-        start_status: &[(St::Thorns, 3)], private_status: &[], counter_to: None, modelled: true,
-        note: "每场战斗开始获得3点荆棘。规则 2026-08-29 才建（在那之前 St::Thorns 没有任何消费点，两侧都不生效）。**这条注释原来写的是「只在敌人身上验过」，是错的** —— 敌人侧同样没建",
+        start_status: &[(St::Thorns, 3)], private_status: &[], counter_to: None,
     },
     // ---- 2026-08-22 这一局遇到的六件。**没有一件欠战斗层建模**，
     //      但"为什么不用建"分两类，混起来会让下一个人白查一遍源码 ----
@@ -4275,18 +4155,15 @@ pub static RELICS: &[RelicDef] = &[
     // 甲、**局外遗物**（和 白银熔炉 / 佩尔之翼 同一档）
     RelicDef {
         id: "LOST_COFFER", name: "失物盒",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] AfterObtained 给 1 次卡牌奖励 + 1 瓶药水。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "PLANISPHERE", name: "活动星图",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] AfterRoomEntered 且当前是 ? 房间时回 5 血。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "YUMMY_COOKIE", name: "美味饼干",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：拾起时升级 4 张牌。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // 乙、**被观测遮住**的三件：效果都发生在回合 1 开始，而内核的手牌和血量
     //     每帧从观测同步 —— 建了要么空转要么重复计数。
@@ -4295,45 +4172,34 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "BELLOWS", name: "风箱",
         start_status: &[], private_status: &[(St::UpgradeOpeningHand, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] AfterPlayerTurnStart 且 TurnNumber<=1 升级手牌。规则在 POWERS 的 HandDrawn；
-               状态导入路径上手牌是观测量（sync 照抄升级态），那边不挂这个 status",
+        counter_to: None,
     },
     RelicDef {
         id: "BONE_TEA", name: "骨茶",
         start_status: &[], private_status: &[],
-        counter_to: None, modelled: true,
-        note: "[源码] 接下来 N 场战斗开局升级初始手牌（和风箱同一个 status）。
-               '还剩几场'是局外状态而且 ShowCounter=false，走 CONDITIONAL_START 由调用方给",
+        counter_to: None,
     },
     RelicDef {
         id: "BLOOD_VIAL", name: "小血瓶",
         start_status: &[], private_status: &[(St::BloodVial, 2)],
-        counter_to: None, modelled: true,
-        note: "[源码] AfterPlayerTurnStartLate 且 TurnNumber<=1 回 2 血。规则在 POWERS；
-               状态导入路径上血量是观测量（开局 66->68 已经含它），那边不挂",
+        counter_to: None,
     },
     RelicDef {
         id: "PEAR", name: "梨子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] 拾起时最大生命值 +10。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "JEWELED_MASK", name: "宝石面具",
         start_status: &[], private_status: &[(St::JeweledMask, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] BeforeHandDraw 且 TurnNumber<=1：抽牌堆里随机一张能力牌进手牌 + SetToFreeThisTurn。
-               规则在 POWERS 的 TurnStart（抽牌之前）；状态导入路径上手牌和费用是观测量，那边不挂",
+        counter_to: None,
     },
     RelicDef {
         id: "NEOWS_TORMENT", name: "涅奥的苦痛",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] 拾起时将 1 张涅奥之怒加入牌组。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     RelicDef {
         id: "AMETHYST_AUBERGINE", name: "紫水晶茄子",
-        start_status: &[], private_status: &[], counter_to: None, modelled: true,
-        note: "局外：[源码] 敌人额外掉落 15 金币。战斗层无关",
+        start_status: &[], private_status: &[], counter_to: None,
     },
     // ---- 2026-09-25 预先补的一批（还没有一件在身上出现过）。全部 [源码]，**未实测** ----
     //
@@ -4343,227 +4209,68 @@ pub static RELICS: &[RelicDef] = &[
     RelicDef {
         id: "VELVET_CHOKER", name: "天鹅绒颈圈",
         start_status: &[], private_status: &[(St::VelvetChoker, 6)],
-        counter_to: None, modelled: true,
-        note: "[源码] ShouldPlay：本回合打满 6 张就不能再出牌（自动打出的也拦）。和懒惰共用 `step::play_cap_reached`。
-               +1 能量是 ModifyMaxEnergy，状态导入路径观测的 max_energy 已含；外部调用方缺少能量上限时按 3 处理。
-               面板计数器 = 本回合已出几张，`sync` 拿它覆盖单帧同步时不知道的 cards_played",
+        counter_to: None,
     },
     RelicDef {
         id: "FIDDLE", name: "小提琴",
         start_status: &[], private_status: &[(St::Fiddle, 2)],
-        counter_to: None, modelled: true,
-        note: "[源码] 开局发牌 +2（ModifyHandDrawLate，走 OwnerHandDraw）；我的回合里除开局发牌外一张都不能抽
-               （ShouldDraw，锁在 `State::draw_one`，敌人回合里不拦）",
+        counter_to: None,
     },
     RelicDef {
         id: "DIAMOND_DIADEM", name: "钻石头冠",
         start_status: &[], private_status: &[(St::DiamondDiadem, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] 我的回合末本回合出牌 ≤ 2 ⇒ 敌人这一回合的有源攻击伤害 ×0.5（乘区，敌人回合末移除）。
-               冻住的意图标签不含它，`damage::frozen_label_after_turn_end` 补",
+        counter_to: None,
     },
     RelicDef {
         id: "RIPPLE_BASIN", name: "波纹水盆",
         start_status: &[], private_status: &[(St::RippleBasin, 4)],
-        counter_to: None, modelled: true,
-        note: "[源码] 我的回合末本回合没打过攻击牌 ⇒ 4 格挡（Unpowered）。单帧同步时 attacks_played 不可知（按 0），方向乐观",
+        counter_to: None,
     },
     RelicDef {
         id: "DAUGHTER_OF_THE_WIND", name: "风的女儿",
         start_status: &[], private_status: &[(St::DaughterOfTheWind, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] 每打出一张攻击牌 1 格挡（Unpowered，不吃敏捷）",
+        counter_to: None,
     },
     RelicDef {
         id: "SHURIKEN", name: "手里剑",
         start_status: &[], private_status: &[(St::Shuriken, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] 同回合每第 3 张攻击牌 +1 力量（第 3/6/9 张都给），和苦无同一个条件",
+        counter_to: None,
     },
     RelicDef {
         id: "KUSARIGAMA", name: "锁镰",
         start_status: &[], private_status: &[(St::Kusarigama, 6)],
-        counter_to: None, modelled: true,
-        note: "[源码] 同回合每第 3 张攻击牌，随机一个敌人 6 点（Unpowered）",
+        counter_to: None,
     },
     RelicDef {
         id: "NUNCHAKU", name: "双截棍",
         start_status: &[], private_status: &[(St::Nunchaku, 1)],
-        counter_to: Some(St::NunchakuCount), modelled: true,
-        note: "[源码] 每打出第 10 张攻击牌 +1 能量。计数器跨战斗（SavedProperty），从面板灌",
+        counter_to: Some(St::NunchakuCount),
     },
     RelicDef {
         id: "GAME_PIECE", name: "棋子",
         start_status: &[], private_status: &[(St::GamePiece, 1)],
-        counter_to: None, modelled: true,
-        note: "[源码] 打出能力牌抽 1 张（真抽牌：带着小提琴会被拦）",
+        counter_to: None,
     },
     RelicDef {
         id: "IRON_CLUB", name: "铁棒",
         start_status: &[], private_status: &[(St::IronClub, 1)],
-        counter_to: Some(St::IronClubCount), modelled: true,
-        note: "[源码] 每打出第 4 张牌（任意类型）抽 1 张。计数器跨战斗（SavedProperty），从面板灌",
+        counter_to: Some(St::IronClubCount),
     },
     RelicDef {
         id: "FAKE_STRIKE_DUMMY", name: "打击木偶？？？",
         start_status: &[], private_status: &[(St::StrikeDummy, 1)],
-        counter_to: None, modelled: true,
-        note: "假商人版：[源码] 和打击木偶逐字同一个类，只有 ExtraDamage 1（真品 3）",
+        counter_to: None,
     },
     RelicDef {
         id: "FAKE_ORICHALCUM", name: "奥利哈钢？？？",
         start_status: &[], private_status: &[(St::Orichalcum, 3)],
-        counter_to: None, modelled: true,
-        note: "假商人版：[源码] 和奥利哈钢逐字同一个类，只有 Block 3（真品 6）。两件一起带时共用一个武装标记，
-               给的格挡相加（6+3），和游戏里两件各判各的结果相同",
+        counter_to: None,
     },
 ];
 
-/// 这个**遗物私有量**是不是「一场只用得掉一次」的。
-///
-/// 状态导入层 从战斗**中途**接进来时要用它：那时前面发生过什么不可知，
-/// 一场只用一次的量要当成**已经用掉**（低估自己），
-/// 而"我身上有这件遗物"这种常数标记任何时候恢复都对。
-///
-/// **判据是数据不是名单**：它自己那条规则里有没有 `TOp::ClearSelf`
-/// —— 那正是 [源码] 里的 `UsedThisCombat`。外加两个**在代码里**被花掉的充能
-/// （臂甲 / 坚定不移，消费点在 `damage::card_block`，没有 `PowerDef` 认领它们，
-/// 所以扫表扫不到）。
-pub fn spent_once_per_combat(st: St) -> bool {
-    if matches!(st, St::VambraceCharge | St::UnmovableCharge | St::RuinedHelmet) {
-        return true;
-    }
-    fn clears_self(ops: &[TOp]) -> bool {
-        ops.iter().any(|op| match op {
-            TOp::ClearSelf => true,
-            TOp::If { then, .. } => clears_self(then),
-            _ => false,
-        })
-    }
-    POWERS.iter().any(|p| p.st == st && clears_self(p.ops))
-}
 
-/// 这个 status 是不是某条 `TCond::EveryNTurns` 的**相位输入**。
-///
-/// 遗物面板上那个计数器（`RelicDef::counter_to`）有两种，灌进内核的方式不同：
-///
-/// * **回合相位**（摆动球的 `TurnsSeen`）：[源码] `AfterPlayerTurnStart` 里
-///   `TurnsSeen = (TurnsSeen + 1) % n`，所以观测到的是**这一场已经加过
-///   `round` 次之后**的值；而 `TCond::EveryNTurns` 算的是 `phase + turn`，
-///   要的是**战斗开始那一刻**的相位 ⇒ 灌进去要把 `round` 减回去。
-/// * **别的计数器**（钢笔尖数打出过几张攻击牌）：和回合数没关系，原样灌。
-///
-/// 判据是数据（谁在 `EveryNTurns` 里当 `phase`），不是名单。
-pub fn is_turn_phase(st: St) -> bool {
-    fn refs(ops: &[TOp], st: St) -> bool {
-        ops.iter().any(|op| match op {
-            TOp::If { cond: TCond::EveryNTurns { phase, .. }, then } => *phase == st || refs(then, st),
-            TOp::If { then, .. } => refs(then, st),
-            _ => false,
-        })
-    }
-    POWERS.iter().any(|p| refs(p.ops, st))
-}
 
-/// 按游戏内部 id 查遗物。查不到 = 内容表里没有这一件。
-pub fn relic_by_id(id: &str) -> Option<&'static RelicDef> {
-    RELICS.iter().find(|r| r.id == id)
-}
-
-/// **只在战斗构造路径上欠账的遗物** —— `RelicDef::modelled` 那一列照不到的那批。
-///
-/// # 两条路，两个覆盖率
-///
-/// `modelled` 问的是「**校验**路径上够不够」。那条路上手牌、血量、药水槽
-/// 全是**观测量**：`状态导入` 每帧照抄，内核再建一遍就是重复计数
-/// （风箱和小血瓶的 `note` 里写着这件事，都是踩过的）。
-///
-/// **评估层 走的是另一条路。** 战斗构造层 凭牌组和遗物**搭**一场仗 ——
-/// 没有观测可抄，于是这批"靠观测兜底"的遗物在那条路上**一件都不生效**。
-/// 两个覆盖率因此是两个数，这张表就是差集。
-///
-/// # 每条写的是「开局那一刻它少做了什么」
-///
-/// 判据统一：**效果发生在开战那一刻、或者依赖 `FightSpec` 装不下的局外状态**。
-/// 纯局外的那些（磨刀石升级两张牌、梨子 +10 最大生命）**不在这里** ——
-/// 它们的产物已经在评估层的输入里（牌组、最大生命），构造器不欠它们什么。
-///
-/// 消费者是 战斗构造层（报成 战斗构造层）。
-/// `synth_only_gaps_name_real_relics` 守着这里的 id 都真在 `RELICS` 里 ——
-/// 打错一个字的后果是这条**永远不会被报出来**，而那正是这张表要防的东西。
-pub static SYNTH_ONLY_GAPS: &[(&str, &str)] = &[
-    // **开局塞药水那两件**：药水不是 status，`begin_combat` 里没有它的位置，
-    // 而 `FightSpec::potions` 是调用方给的一份**战前**清单 —— 那瓶石头是
-    // 开战那一刻才拿到的。要建得先决定「评估层的药水账本长什么样」，
-    // 那是阶段 2/3 的事。
-    ("PETRIFIED_TOAD", "开局塞一瓶药水形状的石头"),
-    ("DELICATE_FROND", "开局把空药水栏填满"),
-    // 壶铃：给多少力量取决于**在休息处换过几次**（`TimesLifted`，`[SavedProperty]`）。
-    // 内核不该猜，调用方走 `FightSpec::start_status` 传进来。
-    ("GIRYA", "开局给力量（换过几次是局外状态，走 FightSpec::start_status）"),
-    // 皮草大衣：拾起时**在地图上标记 7 场仗**，那几场的敌人只有 1 血。
-    // 「哪几场」是路线信息，评估层的整幕链要自己记（阶段 3）。
-    ("FUR_COAT", "标记过的 7 场仗里敌人只有 1 血（哪几场是局外状态）"),
-];
-
-/// 这件遗物在**战斗构造路径**上欠什么。`None` = 不欠（或者本来就 `modelled: false`，
-/// 那条走 战斗构造层）。
-pub fn synth_gap(id: &str) -> Option<&'static str> {
-    SYNTH_ONLY_GAPS.iter().find(|(k, _)| *k == id).map(|(_, why)| *why)
-}
-
-/// **条件武装**：这几件遗物挂不挂 status 取决于 `FightSpec` 里的局外信息。
-///
-/// # 为什么不能进 `RelicDef::private_status`
-///
-/// 那一栏是**无条件**挂的（`grant_relics` 和 状态导入层 都照挂），而这几件
-/// 的条件在**战斗观测里根本没有**：上一个房间是不是休息处、骨茶还剩几场、
-/// 这一场是不是 Boss。挂成无条件就是"每一场都当作刚休息过"，凭空多 2 点能量。
-///
-/// 两条路的处置不同，各自都对：
-/// * **战斗构造路径**：调用方知道自己在模拟哪个房间（战斗构造层），照这张表武装
-/// * **校验路径**：那几个量（能量、手牌升级态、血量）**本来就在观测里**，
-///   `状态导入` 直接照抄 ⇒ **一条都不挂**
-///
-/// `conditional_start_names_resolve` 守着这里的 id 都真在 `RELICS` 里。
-pub static CONDITIONAL_START: &[(&str, Arm, St, i32)] = &[
-    ("VENERABLE_TEA_SET", Arm::AfterRest, St::TeaSet, 2),
-    ("FAKE_VENERABLE_TEA_SET", Arm::AfterRest, St::TeaSet, 1),
-    // 骨茶：[源码] `CombatsLeft` 带 `[SavedProperty]`，而且 `ShowCounter => false`
-    // —— **游戏连面板都不显示**，所以观测里一定拿不到，只能由调用方给。
-    ("BONE_TEA", Arm::RelicCounter, St::UpgradeOpeningHand, 1),
-    ("PANTOGRAPH", Arm::BossRoom, St::Pantograph, 25),
-];
-
-/// 一条「条件武装」的条件。**每一条都有一件真遗物在用**，没有预留的。
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Arm {
-    /// 上一个房间是休息处（两个古茶具）
-    AfterRest,
-    /// 这件遗物自己的**局外计数器** > 0（骨茶的「还剩几场」）
-    RelicCounter,
-    /// 这一场是 Boss 战（缩放仪）
-    BossRoom,
-}
-
-/// 这件遗物在什么条件下武装什么。查不到就是不武装。
-pub fn conditional_start(id: &str) -> Option<(Arm, St, i32)> {
-    CONDITIONAL_START.iter().find(|(k, _, _, _)| *k == id).map(|(_, a, st, v)| (*a, *st, *v))
-}
-
-/// **全部 22 种附魔**（[源码] `MegaCrit.Sts2.Core.Models.Enchantments` 那个
-/// 命名空间里的每一个非抽象类，2026-09-06 逐个读过）。
-///
-/// id 是类名转大写下划线（`RoyallyApproved` -> `ROYALLY_APPROVED`），
-/// 和 mod 报的 `enchantment.id` 逐字对齐 —— 观测里见过的两个
-/// （`NIMBLE` / `ROYALLY_APPROVED`）都对上了，剩下 20 个是**推的**，
-/// 对不上会被 `Report::unknown_enchantments` 点名，不会静默算错。
-///
-/// **`modelled` 那一列才是进度**。今天 8/22 建全了；其余各自缺一个内核还没有的
-/// 机制，`note` 里点名。这和 `RELICS` 是同一个套路 —— 进表不等于建模。
-///
-/// 顺序**不重要**（查表走 `enchant_by_id`），但 `CardInst::ench` 存的是
-/// **下标 + 1**，所以**只许往后加，不许插队**。
+/// Enchantment effect table. `CardInst::ench` stores the table index + 1; append only.
 pub static ENCHANTS: &[EnchantDef] = &[
     // ---- 建全了的 ----
     // [源码] `Nimble.EnchantBlockAdditive => Amount`，`CanEnchant` 要 `card.GainsBlock`。
@@ -4571,7 +4278,7 @@ pub static ENCHANTS: &[EnchantDef] = &[
     EnchantDef {
         id: "NIMBLE", name: "灵巧",
         block_add: EnchVal::Amount, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: true, note: "",
+        keywords: 0,
     },
     // [源码] `RoyallyApproved.OnEnchant` 加 `Innate` + `Retain`，没有任何数值钩子。
     // [实测] 2026-09-06 `历史验证样本` 两个回合边界：均衡+ 留在手上、
@@ -4579,142 +4286,124 @@ pub static ENCHANTS: &[EnchantDef] = &[
     EnchantDef {
         id: "ROYALLY_APPROVED", name: "王室认证",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: F_INNATE | F_RETAIN, modelled: true, note: "",
+        keywords: F_INNATE | F_RETAIN,
     },
     // [源码] `Steady.OnEnchant` 加 `Retain`。
     EnchantDef {
         id: "STEADY", name: "沉稳",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: F_RETAIN, modelled: true, note: "",
+        keywords: F_RETAIN,
     },
     // [源码] `Sharp.EnchantDamageAdditive => Amount`（带 `IsPoweredAttack` 门，
     // 而内核的伤害加值本来就只走卡牌那条路，药水传 0）。扭曲锤子给的就是这个。
     EnchantDef {
         id: "SHARP", name: "锋利",
         block_add: EnchVal::Zero, damage_add: EnchVal::Amount, damage_mul: (1, 1),
-        keywords: 0, modelled: true, note: "",
+        keywords: 0,
     },
     // [源码] `Instinct.EnchantDamageMultiplicative => 2m`。
     EnchantDef {
         id: "INSTINCT", name: "直觉",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (2, 1),
-        keywords: 0, modelled: true, note: "",
+        keywords: 0,
     },
-    // ---- 差一个口子的（`modelled: false`，缺什么写在 note 里）----
     // [源码] 伤害 ×1.5 建了，缺的是 `OnPlay` 那 2 点**不可格挡**自伤
     //（`ValueProp.Unblockable | Unpowered`）—— 内核今天没有"绕过格挡"这一档。
     // 乘区本身和老的 `F_CORRUPT` 逐字同源，见 `damage::card_face_damage`。
     EnchantDef {
         id: "CORRUPTED", name: "腐化",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (3, 2),
-        keywords: 0, modelled: false,
-        note: "伤害 ×1.5 建了；缺 OnPlay 的 2 点不可格挡自伤（内核没有 Unblockable）",
+        keywords: 0,
     },
     // [源码] `Goopy`：`OnEnchant` 加消耗、`EnchantBlockAdditive => Amount-1`、
     // 每打出一次 `Amount++`（**跨战斗累加**，写回 `DeckVersion`）。
     EnchantDef {
         id: "GOOPY", name: "黏糊糊",
         block_add: EnchVal::AmountMinus1, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "格挡加值建了；缺「这一张实例加消耗关键字」和「每打出一次 Amount++」",
+        keywords: 0,
     },
     // [源码] `Vigorous.EnchantDamageAdditive => Amount`，但 `AfterCardPlayed`
     // 把自己 `Disabled` —— **一场只吃一次**。内核没有"附魔本场用过了"这个位。
     EnchantDef {
         id: "VIGOROUS", name: "旺盛",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "欠「本场只生效一次」的实例位；按 0 算 ⇒ 低估第一次那一下的伤害",
+        keywords: 0,
     },
     // [源码] `Momentum.OnPlay` 里 `ExtraDamage += Amount`，加值**每打出一次涨一次**。
     // 和暴走同构（`CardInst::bonus`），但那是牌自己的 op，附魔这一侧还没有对应的钩子。
     EnchantDef {
         id: "MOMENTUM", name: "势能",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "欠「打出时把加值写回这一张实例」（和暴走同构，缺的是附魔侧的 OnPlay）",
+        keywords: 0,
     },
     // [源码] `Inky`：`EnchantDamageAdditive => 1`，外加 `OnPlay` 给目标 1 层虚弱。
     EnchantDef {
         id: "INKY", name: "墨迹",
         block_add: EnchVal::Zero, damage_add: EnchVal::Fixed(1), damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "+1 伤害建了；缺 OnPlay 给目标上 1 层虚弱（欠附魔侧的 OnPlay）",
+        keywords: 0,
     },
     // [源码] `TezcatarasEmber.OnEnchant` 把费用降到 0 并加 `Eternal`，
     // `EnchantDamageAdditive => 3`。
     EnchantDef {
         id: "TEZCATARAS_EMBER", name: "特兹卡塔拉的余烬",
         block_add: EnchVal::Zero, damage_add: EnchVal::Fixed(3), damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "+3 伤害建了；缺「把这一张实例的费用改成 0」和永恒关键字",
+        keywords: 0,
     },
     // ---- 一个口子都没建的（各自欠一个内核根本没有的机制）----
     EnchantDef {
         id: "ADROIT", name: "娴熟",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "打出时额外获得 Amount 点格挡。欠附魔侧的 OnPlay",
+        keywords: 0,
     },
     EnchantDef {
         id: "SOWN", name: "播种",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "本场第一次打出时 +Amount 能量。欠附魔侧的 OnPlay + 「本场用过了」的位",
+        keywords: 0,
     },
     EnchantDef {
         id: "SWIFT", name: "迅捷",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "本场第一次打出时抽 Amount 张。欠附魔侧的 OnPlay + 「本场用过了」的位",
+        keywords: 0,
     },
     EnchantDef {
         id: "GLAM", name: "魅影",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "本场第一次打出时多打出一次。欠 EnchantPlayCount（和未掘宝石的重放同一个洞）",
+        keywords: 0,
     },
     EnchantDef {
         id: "SPIRAL", name: "螺旋",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "每次打出都多打出一次。欠 EnchantPlayCount",
+        keywords: 0,
     },
     EnchantDef {
         id: "SOULS_POWER", name: "灵魂之力",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "去掉这张牌的消耗关键字。欠「按实例改消耗位」（`CardDef.exhausts` 是按牌名的）",
+        keywords: 0,
     },
     EnchantDef {
         id: "SLITHER", name: "滑行",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "每次被抽到时费用随机成 0..3。欠「抽牌时改这一张实例的费用」的钩子",
+        keywords: 0,
     },
     EnchantDef {
         id: "SLUMBERING_ESSENCE", name: "沉睡精华",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "没打出就一直 −1 费。欠 `BeforeFlush` 钩子 + 「打出前一直累积」的费用修饰",
+        keywords: 0,
     },
     EnchantDef {
         id: "IMBUED", name: "灌注",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "开局沉到牌堆底 + 自动预打出阶段。欠 `ShouldStartAtBottomOfDrawPile`",
+        keywords: 0,
     },
     EnchantDef {
         id: "PERFECT_FIT", name: "完美契合",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "改洗牌顺序（`ModifyShuffleOrder`）。欠洗牌钩子",
+        keywords: 0,
     },
     EnchantDef {
         id: "CLONE", name: "复制",
         block_add: EnchVal::Zero, damage_add: EnchVal::Zero, damage_mul: (1, 1),
-        keywords: 0, modelled: false,
-        note: "[源码] 类体是空的（钩子全在别处/未启用）。**先查清楚再动**",
+        keywords: 0,
     },
 ];
 
@@ -4933,7 +4622,7 @@ pub mod enemy {
     /// 死了下一手回满血 —— 主人死了才跟着消失。
     pub const PARAFRIGHT: u16 = 72;
     // ---- 2026-09-09 第 1 幕新一局那一批。**只许往后加，不许插队** ——
-    // `asc::ASC_HP` / `ASC_OPS` 是按这个下标索引的，中间插一条整张表就歪了
+    // `asc::ASC_OPS` 是按这个下标索引的，中间插一条整张表就歪了
     // （`asc_table_indices_still_point_at_the_named_enemy` 守着，但那是事后报警，
     // 不是拦截）。
     pub const SLUDGE_SPINNER: u16 = 73;
@@ -5608,7 +5297,6 @@ static M_EXOSKELETON: Machine = Machine {
 /// **等价的前提**：内核在矛击出完那一刻判（`advance_move`），游戏在喷射信息素**执行**那一刻判 ——
 /// 两者之间蜂房的层数没有任何东西会改（只有喷射信息素自己加它）。
 ///
-/// 两手的意图签名逐字相同（`Buff`），实况对齐靠 `step::move_reachable_now` 挑出
 /// 「当前层数下走得到的那一手」，见 状态导入层。
 static M_ENTOMANCER: Machine = Machine {
     start: Next::Go(0),
@@ -6370,7 +6058,6 @@ pub static ENEMIES: &[EnemyDef] = &[
     // 这个下标原来是一条 [wiki] 档的「螨虫」，**是错的**（浓毒建成了「虚弱 2」），09-14 先摘成占位、
     // 同一天照 [源码] 填回来。名字（怪物和招式）取自游戏本地化表：`MYTE.name` = 异螨。
     //
-    // 血量 61–67（`ToughEnemies` 64–69），表里取上界 67，战斗构造路径从 `asc::hp_range` 掷。
     // 定环 浓毒 -> 啃咬 -> 吸吮 -> 浓毒；**起手按站位**（[源码] 初始态是读 `SlotName` 的
     // `ConditionalBranchState`）：`first` 先浓毒、`second` 先吸吮，见 `M_MYTE`。
     //   浓毒：往我**手牌**塞 2 张毒素（`StatusIntent(2)`，写死的 `_toxicCount`，不吃进阶；手满溢出进弃牌堆）
@@ -7814,7 +7501,6 @@ pub static ENEMIES: &[EnemyDef] = &[
     //
     // `InkletsNormal` **三只同场**，中间那只起手旋风（见 `M_INKLET`）。
     // 血量 11–17（`ToughEnemies` 12–18）—— **是区间**，这里的 `max_hp` 取中位 14，
-    // 真实血量战斗构造路径从 `asc::hp_range` 掷、校验路径从观测灌。
     // 开局 **滑溜 1**：每只都要多挨一次命中才开始掉血，三只就是三次。
     //
     //   0 刺击（`SingleAttackIntent`）：3（`DeadlyEnemies` 4）
@@ -7877,7 +7563,6 @@ pub static ENEMIES: &[EnemyDef] = &[
         ],
     },
     // 97 [源码] 蟾蜍蝌蚪 `Toadpole`（`ToadpolesWeak` **两只同场**，第 1 幕暗港的弱遭遇）。
-    // 血量 21–25（`ToughEnemies` 22–26）—— 区间，`max_hp` 取中位 23，战斗构造路径从 `asc::hp_range` 掷。
     //   0 吐刺（`MultiAttackIntent`）：**先**给自己 −2 荆棘，再 3×3（A9 4×3）
     //   1 旋转（`SingleAttackIntent`）：7（A9 8）
     //   2 带刺（`BuffIntent`）：自身荆棘 +2（不吃进阶）
@@ -7978,7 +7663,6 @@ pub static ENEMIES: &[EnemyDef] = &[
         ],
     },
     // 103 [源码] 劫掠者刺客 `AssassinRubyRaider`（`RubyRaidersNormal` 五选三）。
-    // 血量 18–23（A8 19–24），`max_hp` 取偏低的中位 20（战斗构造路径从 `asc::hp_range` 掷，这个数只是兜底）。
     //   0 致命射击（`SingleAttackIntent`）：10（A9 11），`FollowUpState` 指向自己 —— 一直这一手
     EnemyDef {
         name: "劫掠者刺客", max_hp: 20, start_status: &[], loop_from: 0, machine: None,
@@ -8004,15 +7688,6 @@ pub static ENEMIES: &[EnemyDef] = &[
 /// **复活规则和 [`remaining_hp_including_revives`] 共用这三个数**，别在别处再抄。
 pub const TEST_SUBJECT_FORM_HP: [i32; 3] = [100, 200, 300];
 
-/// [源码] RespawnMove grants PainfulStabs in form 2, Nemesis in form 3.
-/// These observed powers distinguish the two identical 10x3 intent labels.
-pub fn move_matches_form(def: u16, mv: usize, e: &crate::state::Entity) -> bool {
-    if def != enemy::TEST_SUBJECT_BOSS { return true; }
-    if !e.alive() { return mv == 0; }
-    if e.get(St::Nemesis) > 0 { return (4..=6).contains(&mv); }
-    if e.get(St::PainfulStabs) > 0 { return mv == 3; }
-    (1..=2).contains(&mv)
-}
 
 /// 区分形态 1 和形态 2 的门槛（形态 1 的最大生命 ≤ 这个数）。
 /// 取在 100 和 200 中间，进阶档的 111/212 也照样分得开。
@@ -8060,10 +7735,6 @@ pub fn curses_taken(p: &crate::state::Entity, sets: &[CurseSet]) -> usize {
     last_other.max(usize::from(dis > 0))
 }
 
-/// 这只敌人的出招里有没有「知识的诅咒」那种由玩家二选一的招（`advise` 靠它决定要不要摆 8 种选法）。
-pub fn offers_curse_choice(def: u16) -> bool {
-    enemy_def(def).moves.iter().any(|m| m.ops.iter().any(|op| matches!(op, EOp::CurseOfKnowledge(_))))
-}
 
 /// 瀑布巨兽死后锁的血量（[源码] `WaterfallGiant.TriggerAboutToBlowState`：`SetMaxAndCurrentHp(999999999m)`）。
 ///
