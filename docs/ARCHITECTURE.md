@@ -837,3 +837,18 @@ The following invariants should be treated as long-term rules for the project:
 10. **Oracle disagreement creates a reproducible regression case.**
 
 These rules are more important than preserving a particular state size, file layout, or implementation technique.
+
+
+---
+
+## Tracking Issues
+
+The initial implementation work is tracked in:
+
+1. [#1 — Implement exact STS2 RNG streams, counters, and MegaRandom semantics](https://github.com/NoneMore/sts2-fast-sim/issues/1)
+2. [#2 — Replace policy-driven mid-resolution choices with a general continuation model](https://github.com/NoneMore/sts2-fast-sim/issues/2)
+3. [#3 — Replace recursive hook execution and MAX_HOOK_DEPTH truncation with an explicit effect stack](https://github.com/NoneMore/sts2-fast-sim/issues/3)
+4. [#4 — Add canonical state/action APIs with stable instance identities and checked transition errors](https://github.com/NoneMore/sts2-fast-sim/issues/4)
+5. [#5 — Build a Spirescry differential-conformance harness and make it the semantic CI gate](https://github.com/NoneMore/sts2-fast-sim/issues/5)
+6. [#6 — Audit approximations and make exact mode fail closed on unsupported mechanics](https://github.com/NoneMore/sts2-fast-sim/issues/6)
+7. [#7 — Model power provenance and complex mutable power state without abandoning the dense hot path](https://github.com/NoneMore/sts2-fast-sim/issues/7)
